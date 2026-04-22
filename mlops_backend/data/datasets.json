@@ -1,0 +1,38 @@
+[
+  {
+    "dataset_id": "ds-support-tickets",
+    "rows": 125000,
+    "schema_version": 3,
+    "tags": ["production", "nlp"]
+  },
+  {
+    "dataset_id": "ds-code-reviews",
+    "rows": 87500,
+    "schema_version": 2,
+    "tags": ["production", "code-gen", "nlp"]
+  },
+  {
+    "dataset_id": "ds-legal-docs",
+    "rows": 43200,
+    "schema_version": 1,
+    "tags": ["production", "legal", "nlp"]
+  },
+  {
+    "dataset_id": "ds-medical-notes",
+    "rows": 156800,
+    "schema_version": 4,
+    "tags": ["production", "healthcare", "nlp"]
+  },
+  {
+    "dataset_id": "ds-emails",
+    "rows": 234500,
+    "schema_version": 2,
+    "tags": ["production", "nlp", "classification"]
+  },
+  {
+    "dataset_id": "ds-contracts",
+    "rows": 31200,
+    "schema_version": 3,
+    "tags": ["production", "legal", "nlp"]
+  }
+]

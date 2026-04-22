@@ -1,0 +1,86 @@
+[
+  {
+    "alert_id": "alert-001",
+    "endpoint_id": "ep-prod-chat",
+    "severity": "HIGH",
+    "fired_at": "2026-04-20T08:15:00Z",
+    "message": "p99 latency exceeded 2000ms threshold"
+  },
+  {
+    "alert_id": "alert-002",
+    "endpoint_id": "ep-prod-legal",
+    "severity": "HIGH",
+    "fired_at": "2026-04-19T14:30:00Z",
+    "message": "p99 latency exceeded 2000ms threshold"
+  },
+  {
+    "alert_id": "alert-003",
+    "endpoint_id": "ep-prod-legal",
+    "severity": "HIGH",
+    "fired_at": "2026-04-20T10:45:00Z",
+    "message": "error_rate exceeded 0.015 threshold"
+  },
+  {
+    "alert_id": "alert-004",
+    "endpoint_id": "ep-prod-email",
+    "severity": "MEDIUM",
+    "fired_at": "2026-04-17T22:20:00Z",
+    "message": "p99 latency trending upward over 48 hours"
+  },
+  {
+    "alert_id": "alert-005",
+    "endpoint_id": "ep-prod-email",
+    "severity": "HIGH",
+    "fired_at": "2026-04-21T09:00:00Z",
+    "message": "error_rate exceeded 0.015 threshold"
+  },
+  {
+    "alert_id": "alert-006",
+    "endpoint_id": "ep-prod-code",
+    "severity": "LOW",
+    "fired_at": "2026-04-18T16:15:00Z",
+    "message": "replica count below expected level"
+  },
+  {
+    "alert_id": "alert-007",
+    "endpoint_id": "ep-staging-chat",
+    "severity": "LOW",
+    "fired_at": "2026-04-15T11:30:00Z",
+    "message": "QPS spike detected (30% above baseline)"
+  },
+  {
+    "alert_id": "alert-008",
+    "endpoint_id": "ep-prod-medical",
+    "severity": "MEDIUM",
+    "fired_at": "2026-04-19T20:00:00Z",
+    "message": "p50 latency increased by 15%"
+  },
+  {
+    "alert_id": "alert-009",
+    "endpoint_id": "ep-canary-llama",
+    "severity": "LOW",
+    "fired_at": "2026-04-16T13:45:00Z",
+    "message": "QPS spike detected (40% above baseline)"
+  },
+  {
+    "alert_id": "alert-010",
+    "endpoint_id": "ep-prod-chat",
+    "severity": "MEDIUM",
+    "fired_at": "2026-04-21T12:30:00Z",
+    "message": "error_rate trending upward"
+  },
+  {
+    "alert_id": "alert-011",
+    "endpoint_id": "ep-prod-legal",
+    "severity": "MEDIUM",
+    "fired_at": "2026-04-22T03:15:00Z",
+    "message": "replicas experiencing high memory usage"
+  },
+  {
+    "alert_id": "alert-012",
+    "endpoint_id": "ep-internal-dev",
+    "severity": "LOW",
+    "fired_at": "2026-04-14T09:20:00Z",
+    "message": "certificate expiration warning (30 days)"
+  }
+]

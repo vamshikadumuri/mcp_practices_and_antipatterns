@@ -1,0 +1,37 @@
+[
+  {
+    "model_id": "m-llama3-8b-ft",
+    "base": "llama3-8b",
+    "task": "chat",
+    "size_params": 8000000000,
+    "owner": "platform-team"
+  },
+  {
+    "model_id": "m-llama3-8b-ft-v2",
+    "base": "llama3-8b",
+    "task": "chat",
+    "size_params": 8000000000,
+    "owner": "nlp-team"
+  },
+  {
+    "model_id": "m-mistral-7b-ft",
+    "base": "mistral-7b",
+    "task": "code",
+    "size_params": 7000000000,
+    "owner": "dev-tools-team"
+  },
+  {
+    "model_id": "m-phi2-ft",
+    "base": "phi-2",
+    "task": "legal-qa",
+    "size_params": 2700000000,
+    "owner": "legal-ai-team"
+  },
+  {
+    "model_id": "m-gemma2-9b-ft",
+    "base": "gemma-2-9b",
+    "task": "medical-qa",
+    "size_params": 9000000000,
+    "owner": "healthcare-team"
+  }
+]

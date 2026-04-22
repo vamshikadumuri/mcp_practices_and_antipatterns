@@ -1,0 +1,66 @@
+[
+  {
+    "endpoint_id": "ep-prod-chat",
+    "model_id": "m-llama3-8b-ft",
+    "traffic_split": {"m-llama3-8b-ft": 90, "m-llama3-8b-ft-v2": 10},
+    "replicas": 6,
+    "created_at": "2026-03-15T00:00:00Z",
+    "status": "HEALTHY"
+  },
+  {
+    "endpoint_id": "ep-prod-code",
+    "model_id": "m-mistral-7b-ft",
+    "traffic_split": {"m-mistral-7b-ft": 100},
+    "replicas": 4,
+    "created_at": "2026-03-20T00:00:00Z",
+    "status": "HEALTHY"
+  },
+  {
+    "endpoint_id": "ep-prod-legal",
+    "model_id": "m-llama3-8b-ft-v2",
+    "traffic_split": {"m-llama3-8b-ft-v2": 85, "m-llama3-8b-ft": 15},
+    "replicas": 3,
+    "created_at": "2026-03-25T00:00:00Z",
+    "status": "DEGRADED"
+  },
+  {
+    "endpoint_id": "ep-staging-chat",
+    "model_id": "m-phi2-ft",
+    "traffic_split": {"m-phi2-ft": 100},
+    "replicas": 2,
+    "created_at": "2026-03-10T00:00:00Z",
+    "status": "HEALTHY"
+  },
+  {
+    "endpoint_id": "ep-prod-medical",
+    "model_id": "m-gemma2-9b-ft",
+    "traffic_split": {"m-gemma2-9b-ft": 95, "m-llama3-8b-ft": 5},
+    "replicas": 5,
+    "created_at": "2026-03-18T00:00:00Z",
+    "status": "HEALTHY"
+  },
+  {
+    "endpoint_id": "ep-prod-email",
+    "model_id": "m-mistral-7b-ft",
+    "traffic_split": {"m-mistral-7b-ft": 80, "m-phi2-ft": 20},
+    "replicas": 3,
+    "created_at": "2026-03-22T00:00:00Z",
+    "status": "DEGRADED"
+  },
+  {
+    "endpoint_id": "ep-canary-llama",
+    "model_id": "m-llama3-8b-ft-v2",
+    "traffic_split": {"m-llama3-8b-ft-v2": 100},
+    "replicas": 1,
+    "created_at": "2026-04-01T00:00:00Z",
+    "status": "HEALTHY"
+  },
+  {
+    "endpoint_id": "ep-internal-dev",
+    "model_id": "m-phi2-ft",
+    "traffic_split": {"m-phi2-ft": 100},
+    "replicas": 1,
+    "created_at": "2026-03-05T00:00:00Z",
+    "status": "HEALTHY"
+  }
+]
