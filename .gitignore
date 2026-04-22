@@ -1,0 +1,9 @@
+codemodevenv/
+__pycache__/
+*.pyc
+.env
+.env.*
+!.env.example
+bench/results/
+.pytest_cache/
+.claude/settings.local.json
