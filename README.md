@@ -2,65 +2,93 @@
 
 ## Project Goal
 
-This project demonstrates Anthropic's Code Mode MCP pattern — where an AI assistant gets two
-tools (`list_api` + `execute_python`) instead of 15 individual tools — and measures the token
-savings on apples-to-apples ML-ops scenarios using the Anthropic API. The benchmark runs the
-same five realistic ML-ops prompts through both a classic 15-tool server and a Code Mode 2-tool
-server, captures input/output token counts at every API turn, and renders a side-by-side report
-so you can see exactly where the savings come from.
+This project demonstrates three progressively better ways to expose the same ML-ops backend
+as MCP tools, and measures the token cost difference across five realistic scenarios using the
+Anthropic API.
+
+| Server | Tools | Design style |
+|---|---:|---|
+| `rest_mirror_server` | 22 | Naive REST/OpenAPI mirror — what you get from a gateway auto-converting your Django Swagger JSON |
+| `classic_server` | 15 | Hand-written CRUD tools — cleaner naming, no envelopes, but still resource-oriented |
+| `task_oriented_server` | 6 | Workflow aggregates — one tool per user intent, single-call answers |
+| `codemode_server` | 2 | Code Mode — `list_api` + `execute_python`, model writes and runs its own queries |
+
+Each server is benchmarked against the same five prompts. Token counts and turn counts are
+captured at every API call. The report shows exactly where the savings come from.
 
 ---
 
 ## Architecture
 
 ```
-                    ┌─────────────────────────────┐
-                    │      mlops_backend/api.py    │
-                    │   15 typed Python functions  │
-                    └──────────┬──────────────────┘
-                               │ imported by
-            ┌──────────────────┼──────────────────┐
-            │                  │                  │
-  ┌─────────▼──────┐  ┌────────▼──────────┐      │
-  │ classic_server  │  │ codemode_server   │      │
-  │ 15 @mcp.tool   │  │ 2 tools only:     │      │
-  │ functions      │  │  • list_api       │      │
-  └────────────────┘  │  • execute_python │      │
-                      └───────────────────┘      │
-                                                  │
-                      ┌───────────────────────────┘
-                      │ bench/run_benchmark.py
-                      │ Anthropic API + mcp stdio
-                      │ Runs same 5 prompts through
-                      │ both servers, captures usage
-                      └──────────────────────────
+                        mlops_backend/data/*.json   (shared synthetic data)
+                                     │
+                        mlops_backend/data.py
+                          /           │           \           \
+          rest_api.py    api.py   task_api.py   api.py    api.py
+          22 REST        15 RPC   6 workflow    (classic) (codemode)
+          primitives     funcs    aggregates
+               │            │         │
+    rest_mirror_server  classic_server  task_oriented_server  codemode_server
+    22 @mcp.tool        15 @mcp.tool    6 @mcp.tool           2 @mcp.tool
+    operationId names   clean names     action names          list_api +
+    verbose docstrings  CRUD-shaped     concise docstrings    execute_python
+    paginated envelopes no envelopes    no envelopes
+    stub write ops
+               \            │         │               /
+                         bench/run_benchmark.py
+                         Runs any subset of servers × 5 scenarios
+                         Captures input/output/cache tokens per turn
+                              │
+                         bench/report.py
+                         Pairwise token-savings table + transcripts
 ```
 
 ---
 
-## How Code Mode Differs from Classic Tool Use
+## The Antipattern: REST/OpenAPI Mirror
 
-**Classic server** exposes 15 individual MCP tools — one per ML-ops operation (e.g.,
-`list_failed_jobs`, `get_model_metrics`, `trigger_retraining`, ...). When the model handles a
-multi-step scenario it must call each tool in a separate API turn. Critically, every single
-request carries the **full 15-tool JSON schema** in the system context, which inflates input
-tokens on every turn.
+Many teams use an MCP gateway (e.g. IBM mcp-context-forge) to auto-convert a Django app's
+OpenAPI 3.0 spec into MCP tools. It works, but it produces tools that are expensive for agents:
+
+**Tool sprawl.** A DRF ViewSet auto-exposes `list / retrieve / create / update / partial_update /
+destroy` per resource. Five resources → 22+ tools. Every agent turn re-sends the full tool
+schema in the context window, even for tools the agent never uses.
+
+**Pagination loops.** DRF default pagination wraps every list response in
+`{count, next, previous, results}`. The agent either follows `next` (extra turns) or stops
+short (incomplete results).
+
+**No aggregates.** There is no `compare_these_3_jobs` endpoint in REST. The agent must
+list → retrieve-per-id → compute client-side, costing N+1 turns.
+
+**Verbose auto-generated descriptions.** OpenAPI operationIds and drf-spectacular descriptions
+add schema weight that is meaningless to the agent but counts as input tokens on every turn.
+
+**Task-oriented tools fix all of this.** `triage_failed_batch_jobs(since_hours=48)` answers
+the full "failed jobs" scenario in one call and returns only what the agent needs.
+
+---
+
+## How Code Mode Differs from Task-Oriented Tools
+
+**Task-oriented server** hand-designs one tool per workflow. Six tools cover the six common
+ML-ops scenarios. Each tool does its own cross-resource joining and computation server-side.
 
 **Code Mode server** exposes just 2 tools:
 
 | Tool | Purpose |
 |---|---|
-| `list_api` | Returns the docstrings and signatures of all available backend functions |
-| `execute_python` | Runs a snippet of Python code inside an isolated subprocess |
+| `list_api` | Returns docstrings and signatures of all available backend functions |
+| `execute_python` | Runs a Python snippet inside an isolated subprocess |
 
 The model's workflow becomes:
 1. Call `list_api` once to discover what functions exist.
 2. Write a short Python script that calls several backend functions in sequence.
-3. Call `execute_python` once — getting all results in a single round-trip.
+3. Call `execute_python` once — all results in a single round-trip.
 
-This collapses a 4–6 turn classic conversation into 2–3 turns, and cuts per-turn token
-overhead from a 15-tool schema down to a 2-tool schema. At scale the savings compound: fewer
-turns means fewer full-context re-sends.
+This handles scenarios that no pre-designed tool covers. It also carries the smallest tool
+schema (2 tools) on every turn. The tradeoff: requires a sandboxed execution environment.
 
 This follows the pattern described by Anthropic at:
 https://www.anthropic.com/engineering/code-execution-with-mcp
@@ -74,36 +102,26 @@ The `execute_python` tool runs submitted code in a subprocess with several guard
 ### What IS enforced
 
 - **Wall-clock timeout** (default 5 s) — the subprocess is killed if it runs long.
-- **Restricted `__builtins__`** — the following are removed from the execution namespace:
-  `__import__`, `open`, `eval`, `exec`, `getattr`. This blocks the most common escape hatches
-  without requiring a full language sandbox.
-- **Isolated environment and working directory** — the subprocess receives a clean `env` dict
-  and runs in a neutral `cwd`, not the repo root.
-- **`python -I` (isolated mode)** — ignores the parent process's `PYTHONPATH` and
-  `site-packages`, so the executed code cannot import arbitrary installed packages.
+- **Restricted `__builtins__`** — `__import__`, `open`, `eval`, `exec`, `getattr` are removed.
+- **Isolated environment and working directory** — clean `env` dict, neutral `cwd`.
+- **`python -I` (isolated mode)** — ignores parent `PYTHONPATH` and `site-packages`.
 
 ### What is NOT enforced
 
-- **CPU / memory caps** — Python's `resource` module is Unix-only. Windows has no equivalent
-  in the standard library and Job Objects are not wired up here.
-- **Network egress** — syscalls are not intercepted at the OS level. Code could open a socket
-  if `socket` were importable (it isn't via `__import__` removal, but a determined attacker
-  could work around this).
+- **CPU / memory caps** — Python's `resource` module is Unix-only; no equivalent on Windows.
+- **Network egress** — syscalls are not intercepted at the OS level.
 
 ### Production recommendation
 
 For a production Code Mode deployment exposed to arbitrary users:
 
-- **Language-level isolation:** Cloudflare Workers, Pyodide-in-WASM, or Deno provide true
-  sandboxing with memory/CPU limits and no native syscalls.
-- **OS-level isolation:** `nsjail` (Linux) or Docker-per-call gives full process namespace
-  isolation with network and filesystem controls.
+- **Language-level isolation:** Cloudflare Workers, Pyodide-in-WASM, or Deno.
+- **OS-level isolation:** `nsjail` (Linux) or Docker-per-call.
 
 ### Why this demo is safe as-is
 
 The only party submitting code to `execute_python` is Claude, acting on behalf of our own API
-key. We are not exposing this endpoint to arbitrary external users. The guardrails are
-sufficient for a controlled benchmark environment.
+key. The guardrails are sufficient for a controlled benchmark environment.
 
 ---
 
@@ -116,6 +134,8 @@ sufficient for a controlled benchmark environment.
 - To run the benchmark you must:
   1. Copy `.env.example` to `.env`
   2. Replace the placeholder value with your real `ANTHROPIC_API_KEY`
+  3. Save the file as **UTF-8** (not UTF-16) — Windows Notepad may default to UTF-16 with BOM,
+     which will break the dotenv loader.
 - **Never run `git add .env`** — if you do, rotate your key immediately.
 
 ---
@@ -130,14 +150,19 @@ codemodevenv\Scripts\python.exe -m pip install -e ".[dev]"
 codemodevenv\Scripts\python.exe -m pytest tests/ -v
 
 # Run a server standalone (Ctrl-C to stop):
+codemodevenv\Scripts\python.exe -m servers.rest_mirror_server
+codemodevenv\Scripts\python.exe -m servers.task_oriented_server
 codemodevenv\Scripts\python.exe -m servers.classic_server
 codemodevenv\Scripts\python.exe -m servers.codemode_server
 
-# Run the full benchmark (requires ANTHROPIC_API_KEY in .env):
+# Run the full 4-server benchmark (requires ANTHROPIC_API_KEY in .env):
 codemodevenv\Scripts\python.exe -m bench.run_benchmark
 
+# Run only the REST-mirror vs task-oriented comparison:
+codemodevenv\Scripts\python.exe -m bench.run_benchmark --servers rest_mirror task_oriented
+
 # Run a single scenario for quick testing:
-codemodevenv\Scripts\python.exe -m bench.run_benchmark --scenarios failed_jobs_triage
+codemodevenv\Scripts\python.exe -m bench.run_benchmark --servers rest_mirror task_oriented --scenarios failed_jobs_triage
 
 # Generate report from a saved run:
 codemodevenv\Scripts\python.exe -m bench.report bench/results/<timestamp>
@@ -149,5 +174,5 @@ codemodevenv\Scripts\python.exe -m bench.report bench/results/<timestamp>
 
 _(Run the benchmark to populate this section.)_
 
-<!-- After running `python -m bench.run_benchmark`, paste the table from
+<!-- After running the benchmark, paste the table from
      bench/results/<timestamp>/report.md here. -->

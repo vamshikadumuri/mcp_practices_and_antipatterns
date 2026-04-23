@@ -11,8 +11,10 @@ MODEL = os.getenv("BENCH_MODEL", "claude-sonnet-4-6")
 MAX_TURNS = 20
 
 SERVERS = {
-    "classic":  ["-m", "servers.classic_server"],
-    "codemode": ["-m", "servers.codemode_server"],
+    "classic":       ["-m", "servers.classic_server"],
+    "codemode":      ["-m", "servers.codemode_server"],
+    "rest_mirror":   ["-m", "servers.rest_mirror_server"],
+    "task_oriented": ["-m", "servers.task_oriented_server"],
 }
 
 def mcp_tools_to_anthropic(tools):
