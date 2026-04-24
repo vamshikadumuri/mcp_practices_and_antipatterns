@@ -36,4 +36,13 @@ SCENARIOS = [
             "or resubmit the full job."
         ),
     },
+    {
+        "id": "model_failure_by_dataset",
+        "prompt": (
+            "For each dataset, count how many batch jobs on that dataset failed in the "
+            "last 7 days. Show datasets with at least one failure, sorted by failure count "
+            "descending. For the dataset with the most failures, also show the breakdown "
+            "by failure_reason."
+        ),
+    },
 ]

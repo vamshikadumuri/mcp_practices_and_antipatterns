@@ -1,79 +1,118 @@
-from datetime import datetime, timedelta, timezone
-from . import data
+"""REST client for the mlops_backend Flask app.
 
-def list_batch_jobs(status: str | None = None, model_id: str | None = None,
-                    since_hours: int | None = None) -> list[dict]:
-    rows = data.load("batch_jobs")
-    if status:
-        rows = [r for r in rows if r["status"] == status]
-    if model_id:
-        rows = [r for r in rows if r["model_id"] == model_id]
-    if since_hours is not None:
-        cutoff = datetime.now(timezone.utc) - timedelta(hours=since_hours)
-        rows = [r for r in rows
-                if datetime.fromisoformat(r["submitted_at"].replace("Z", "+00:00")) >= cutoff]
-    return rows
+One function per endpoint. Return shapes match Flask's responses exactly:
+pagination envelopes on list endpoints, raw dicts on retrieve/create/update/delete,
+{"job_id", "lines", "content"} on log endpoints. Nothing is unwrapped, composed,
+or aggregated here — that is MCP-server code's job.
+"""
+import os
+import requests
 
-def get_batch_job(job_id: str) -> dict:
-    for r in data.load("batch_jobs"):
-        if r["job_id"] == job_id:
-            return r
-    raise KeyError(job_id)
+_BASE = os.getenv("MLOPS_API_URL", "http://127.0.0.1:7319")
+_TIMEOUT = 10.0
 
-def get_batch_job_logs(job_id: str, lines: int = 50) -> str:
-    job = get_batch_job(job_id)
-    header = f"[job {job_id} model={job['model_id']} status={job['status']}]"
-    body = "\n".join(f"step {i:04d} loss=... " for i in range(lines))
-    tail = f"\n{job.get('failure_reason','')}" if job["status"] == "FAILED" else ""
-    return header + "\n" + body + tail
 
-def retry_failed_shards(job_id: str) -> dict:
-    job = get_batch_job(job_id)
-    return {"job_id": job_id, "retried_shards": job.get("shards_failed", 0), "new_job_id": f"{job_id}-r1"}
+def _get(path, **params):
+    params = {k: v for k, v in params.items() if v is not None}
+    r = requests.get(f"{_BASE}{path}", params=params, timeout=_TIMEOUT)
+    r.raise_for_status()
+    return r.json()
 
-def list_models() -> list[dict]: return data.load("models")
-def get_model(model_id: str) -> dict:
-    for m in data.load("models"):
-        if m["model_id"] == model_id: return m
-    raise KeyError(model_id)
+def _post(path, json=None):
+    r = requests.post(f"{_BASE}{path}", json=json, timeout=_TIMEOUT)
+    r.raise_for_status()
+    return r.json()
 
-def list_datasets() -> list[dict]: return data.load("datasets")
-def get_dataset(dataset_id: str) -> dict:
-    for d in data.load("datasets"):
-        if d["dataset_id"] == dataset_id: return d
-    raise KeyError(dataset_id)
+def _patch(path, json=None):
+    r = requests.patch(f"{_BASE}{path}", json=json, timeout=_TIMEOUT)
+    r.raise_for_status()
+    return r.json()
 
-def list_endpoints(status: str | None = None) -> list[dict]:
-    rows = data.load("endpoints")
-    return [r for r in rows if not status or r["status"] == status]
+def _delete(path):
+    r = requests.delete(f"{_BASE}{path}", timeout=_TIMEOUT)
+    r.raise_for_status()
+    return r.json()
 
-def get_endpoint(endpoint_id: str) -> dict:
-    for e in data.load("endpoints"):
-        if e["endpoint_id"] == endpoint_id: return e
-    raise KeyError(endpoint_id)
 
-def get_endpoint_metrics(endpoint_id: str, days: int = 7) -> list[dict]:
-    rows = [m for m in data.load("metrics") if m["endpoint_id"] == endpoint_id]
-    rows.sort(key=lambda r: r["date"], reverse=True)
-    return rows[:days]
+# --- Batch jobs ------------------------------------------------------------
 
-def update_traffic_split(endpoint_id: str, splits: dict) -> dict:
-    return {"endpoint_id": endpoint_id, "applied": splits, "status": "OK"}
+def list_batch_jobs(status=None, model_id=None, submitted_after=None, page=1, page_size=20):
+    return _get("/batch_jobs/", status=status, model_id=model_id,
+                submitted_after=submitted_after, page=page, page_size=page_size)
 
-def tail_endpoint_logs(endpoint_id: str, lines: int = 50) -> str:
-    ep = get_endpoint(endpoint_id)
-    return f"[endpoint {endpoint_id} model={ep['model_id']}]\n" + \
-           "\n".join(f"req {i} 200 latency_ms=..." for i in range(lines))
+def retrieve_batch_job(job_id):
+    return _get(f"/batch_jobs/{job_id}/")
 
-def list_alerts(severity: str | None = None) -> list[dict]:
-    rows = data.load("alerts")
-    return [r for r in rows if not severity or r["severity"] == severity]
+def create_batch_job(model_id, dataset_id, shards_total=16):
+    return _post("/batch_jobs/", {"model_id": model_id, "dataset_id": dataset_id,
+                                   "shards_total": shards_total})
 
-def compare_runs(job_ids: list[str]) -> dict:
-    jobs = [get_batch_job(j) for j in job_ids]
-    return {
-        "job_ids": job_ids,
-        "gpu_hours": {j["job_id"]: j["gpu_hours"] for j in jobs},
-        "cost_usd": {j["job_id"]: j["cost_usd"] for j in jobs},
-        "status": {j["job_id"]: j["status"] for j in jobs},
-    }
+def destroy_batch_job(job_id):
+    return _delete(f"/batch_jobs/{job_id}/")
+
+def retrieve_batch_job_logs(job_id, lines=50):
+    return _get(f"/batch_jobs/{job_id}/logs/", lines=lines)
+
+def retry_batch_job_shards(job_id):
+    return _post(f"/batch_jobs/{job_id}/retry_shards/")
+
+
+# --- Models ----------------------------------------------------------------
+
+def list_models(page=1, page_size=20):
+    return _get("/models/", page=page, page_size=page_size)
+
+def retrieve_model(model_id):
+    return _get(f"/models/{model_id}/")
+
+def create_model(name, version):
+    return _post("/models/", {"name": name, "version": version})
+
+def partial_update_model(model_id, **fields):
+    return _patch(f"/models/{model_id}/", fields)
+
+
+# --- Datasets --------------------------------------------------------------
+
+def list_datasets(page=1, page_size=20):
+    return _get("/datasets/", page=page, page_size=page_size)
+
+def retrieve_dataset(dataset_id):
+    return _get(f"/datasets/{dataset_id}/")
+
+
+# --- Endpoints -------------------------------------------------------------
+
+def list_endpoints(status=None, page=1, page_size=20):
+    return _get("/endpoints/", status=status, page=page, page_size=page_size)
+
+def retrieve_endpoint(endpoint_id):
+    return _get(f"/endpoints/{endpoint_id}/")
+
+def create_endpoint(name, model_id):
+    return _post("/endpoints/", {"name": name, "model_id": model_id})
+
+def destroy_endpoint(endpoint_id):
+    return _delete(f"/endpoints/{endpoint_id}/")
+
+def partial_update_endpoint(endpoint_id, **fields):
+    return _patch(f"/endpoints/{endpoint_id}/", fields)
+
+def list_endpoint_metrics(endpoint_id, days=7, page=1, page_size=20):
+    return _get(f"/endpoints/{endpoint_id}/metrics/", days=days, page=page, page_size=page_size)
+
+def retrieve_endpoint_logs(endpoint_id, lines=50):
+    return _get(f"/endpoints/{endpoint_id}/logs/", lines=lines)
+
+def update_endpoint_traffic(endpoint_id, splits):
+    return _patch(f"/endpoints/{endpoint_id}/traffic/", {"splits": splits})
+
+
+# --- Alerts ----------------------------------------------------------------
+
+def list_alerts(severity=None, fired_after=None, page=1, page_size=20):
+    return _get("/alerts/", severity=severity, fired_after=fired_after,
+                page=page, page_size=page_size)
+
+def retrieve_alert(alert_id):
+    return _get(f"/alerts/{alert_id}/")

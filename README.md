@@ -1,168 +1,163 @@
 # MCP Code Mode Demo
 
-## Project Goal
+## Goal
 
-This project demonstrates three progressively better ways to expose the same ML-ops backend
-as MCP tools, and measures the token cost difference across five realistic scenarios using the
-Anthropic API.
+Three MCP servers expose the same ML-ops Flask backend. Two focused comparisons
+let an ML-ops team answer concrete questions about how they should build their
+own MCP layer.
 
-| Server | Tools | Design style |
-|---|---:|---|
-| `rest_mirror_server` | 22 | Naive REST/OpenAPI mirror — what you get from a gateway auto-converting your Django Swagger JSON |
-| `classic_server` | 15 | Hand-written CRUD tools — cleaner naming, no envelopes, but still resource-oriented |
-| `task_oriented_server` | 6 | Workflow aggregates — one tool per user intent, single-call answers |
-| `codemode_server` | 2 | Code Mode — `list_api` + `execute_python`, model writes and runs its own queries |
+| # | Server | Tools | Role |
+|---|---|---:|---|
+| 1 | `rest_mirror_server` | 22 | What an auto-generating MCP gateway produces from the Swagger spec |
+| 2 | `task_oriented_server` | 6 | Thoughtfully hand-designed workflow aggregates |
+| 3 | `task_codemode_server` | 6 + 2 | Same 6 task tools, plus `list_api` + `execute_python` as an escape hatch |
 
-Each server is benchmarked against the same five prompts. Token counts and turn counts are
-captured at every API call. The report shows exactly where the savings come from.
+**Comparison #1 — gateway-generated vs. hand-designed MCP**
+Does the extra effort of writing task tools pay off vs. auto-generating from OpenAPI?
+
+**Comparison #2 — task tools vs. task tools + Code Mode**
+Does adding Code Mode earn its keep on top of a strong task-tool baseline?
 
 ---
 
 ## Architecture
 
 ```
-                        mlops_backend/data/*.json   (shared synthetic data)
-                                     │
-                        mlops_backend/data.py
-                          /           │           \           \
-          rest_api.py    api.py   task_api.py   api.py    api.py
-          22 REST        15 RPC   6 workflow    (classic) (codemode)
-          primitives     funcs    aggregates
-               │            │         │
-    rest_mirror_server  classic_server  task_oriented_server  codemode_server
-    22 @mcp.tool        15 @mcp.tool    6 @mcp.tool           2 @mcp.tool
-    operationId names   clean names     action names          list_api +
-    verbose docstrings  CRUD-shaped     concise docstrings    execute_python
-    paginated envelopes no envelopes    no envelopes
-    stub write ops
-               \            │         │               /
-                         bench/run_benchmark.py
-                         Runs any subset of servers × 5 scenarios
-                         Captures input/output/cache tokens per turn
-                              │
-                         bench/report.py
-                         Pairwise token-savings table + transcripts
+┌─────────────────────────────────────────────────────────────┐
+│  mlops_backend/flask_app.py  — real Flask app (subprocess)  │
+│  DRF-style endpoints over data/*.json                       │
+│  "Production": fixed shape, fixed behavior.                 │
+└─────────────────────────────────────────────────────────────┘
+                            ▲
+                            │ HTTP (requests)
+          ┌─────────────────┴────────────────────────┐
+          │  mlops_backend/api.py                    │
+          │  REST client ONLY — 1:1 with Flask.      │
+          │  Preserves pagination envelopes exactly. │
+          │  No unwrapping, no composition.          │
+          └────┬───────────────────────────┬─────────┘
+               │                           │
+    ┌──────────▼────────────┐   ┌──────────▼──────────────────────┐
+    │ rest_mirror_server.py │   │ servers/mlops.py                │
+    │ 22 @mcp.tool          │   │ MCP-side helpers (NOT backend): │
+    │ verbose OAS docstrings│   │  - pagination-unwrapping lists  │
+    │ pagination envelopes  │   │  - 6 workflow aggregates        │
+    │ stub write tools      │   └──────────┬──────────┬───────────┘
+    └───────────────────────┘              │          │
+                               ┌───────────▼──┐   ┌───▼───────────────────┐
+                               │ task_oriented│   │ task_codemode_server  │
+                               │ _server      │   │ 6 task tools          │
+                               │ 6 @mcp.tool  │   │ + list_api            │
+                               │              │   │ + execute_python      │
+                               └──────────────┘   └───────────────────────┘
 ```
 
----
-
-## The Antipattern: REST/OpenAPI Mirror
-
-Many teams use an MCP gateway (e.g. IBM mcp-context-forge) to auto-convert a Django app's
-OpenAPI 3.0 spec into MCP tools. It works, but it produces tools that are expensive for agents:
-
-**Tool sprawl.** A DRF ViewSet auto-exposes `list / retrieve / create / update / partial_update /
-destroy` per resource. Five resources → 22+ tools. Every agent turn re-sends the full tool
-schema in the context window, even for tools the agent never uses.
-
-**Pagination loops.** DRF default pagination wraps every list response in
-`{count, next, previous, results}`. The agent either follows `next` (extra turns) or stops
-short (incomplete results).
-
-**No aggregates.** There is no `compare_these_3_jobs` endpoint in REST. The agent must
-list → retrieve-per-id → compute client-side, costing N+1 turns.
-
-**Verbose auto-generated descriptions.** OpenAPI operationIds and drf-spectacular descriptions
-add schema weight that is meaningless to the agent but counts as input tokens on every turn.
-
-**Task-oriented tools fix all of this.** `triage_failed_batch_jobs(since_hours=48)` answers
-the full "failed jobs" scenario in one call and returns only what the agent needs.
+**The invariant:** `mlops_backend/api.py` is a pure REST client — nothing more.
+Every MCP server builds its own helpers in `servers/mlops.py` on top of the fixed
+backend. This mirrors production reality: the backend is owned by a different team
+and its shape is fixed. The MCP layer is where you decide how to expose it.
 
 ---
 
-## How Code Mode Differs from Task-Oriented Tools
+## Comparison #1 — REST-mirror vs. Task-oriented
 
-**Task-oriented server** hand-designs one tool per workflow. Six tools cover the six common
-ML-ops scenarios. Each tool does its own cross-resource joining and computation server-side.
+An auto-generating gateway (IBM mcp-context-forge, any OpenAPI→MCP converter)
+applied to a Django/DRF Swagger spec produces tools like the REST-mirror server.
+A human writing task tools produces the task-oriented server. Four things change
+together:
 
-**Code Mode server** exposes just 2 tools:
+| Dimension | REST-mirror | Task-oriented |
+|---|---|---|
+| Tool count | 22 | 6 |
+| Schema per turn | Full 22-tool schema on every API call | 6 compact tool schemas |
+| List responses | DRF pagination envelopes (`count/next/previous/results`) | Flat lists, fully unwrapped |
+| Write stubs | Yes — `create_*`, `destroy_*`, `partial_update_*` inflate schema even if never called | No |
+
+The agent working with REST-mirror must loop over pagination to collect all results,
+call N+1 endpoints to answer a cross-resource question, and carry the bloated schema
+on every turn. The task tool returns the complete answer in one call.
+
+---
+
+## Comparison #2 — Task-oriented vs. Task-oriented + Code Mode
+
+The `task_codemode_server` carries the same 6 task tools plus two Code Mode tools:
 
 | Tool | Purpose |
 |---|---|
-| `list_api` | Returns docstrings and signatures of all available backend functions |
-| `execute_python` | Runs a Python snippet inside an isolated subprocess |
+| `list_api` | Returns signatures and docstrings of all helpers in `servers/mlops.py` |
+| `execute_python` | Runs a Python snippet in a sandboxed subprocess; `mlops` pre-imported |
 
-The model's workflow becomes:
-1. Call `list_api` once to discover what functions exist.
-2. Write a short Python script that calls several backend functions in sequence.
-3. Call `execute_python` once — all results in a single round-trip.
-
-This handles scenarios that no pre-designed tool covers. It also carries the smallest tool
-schema (2 tools) on every turn. The tradeoff: requires a sandboxed execution environment.
-
-This follows the pattern described by Anthropic at:
-https://www.anthropic.com/engineering/code-execution-with-mcp
+On the five standard scenarios, both servers should perform similarly — the agent
+uses the matching task tool in both cases. The sixth scenario (`model_failure_by_dataset`)
+has no matching task tool: the `task_oriented_server` must stitch together multiple
+primitives across turns, while `task_codemode_server` answers it in one
+`execute_python` call. The schema overhead of carrying two extra tools on every turn
+is the honest cost on the other side.
 
 ---
 
-## Sandbox Model
+## "Production is fixed" framing
 
-The `execute_python` tool runs submitted code in a subprocess with several guardrails.
+`mlops_backend/api.py` represents exactly what a production Flask/DRF app exposes
+over HTTP. It is a 1:1 REST client — no pagination unwrapping, no composition, no
+aggregation. Reading it alone, a reviewer sees only HTTP calls that mirror Flask
+endpoints.
 
-### What IS enforced
-
-- **Wall-clock timeout** (default 5 s) — the subprocess is killed if it runs long.
-- **Restricted `__builtins__`** — `__import__`, `open`, `eval`, `exec`, `getattr` are removed.
-- **Isolated environment and working directory** — clean `env` dict, neutral `cwd`.
-- **`python -I` (isolated mode)** — ignores parent `PYTHONPATH` and `site-packages`.
-
-### What is NOT enforced
-
-- **CPU / memory caps** — Python's `resource` module is Unix-only; no equivalent on Windows.
-- **Network egress** — syscalls are not intercepted at the OS level.
-
-### Production recommendation
-
-For a production Code Mode deployment exposed to arbitrary users:
-
-- **Language-level isolation:** Cloudflare Workers, Pyodide-in-WASM, or Deno.
-- **OS-level isolation:** `nsjail` (Linux) or Docker-per-call.
-
-### Why this demo is safe as-is
-
-The only party submitting code to `execute_python` is Claude, acting on behalf of our own API
-key. The guardrails are sufficient for a controlled benchmark environment.
+`servers/mlops.py` is what any MCP tool author would write on top of that fixed
+backend: helpers that unwrap pagination, join resources, and compute workflow
+aggregates. It is explicitly **not** part of the backend.
 
 ---
 
-## Secrets Warning
+## Sandbox model
 
-**IMPORTANT — Read before cloning.**
+`execute_python` runs submitted code in a subprocess with these guardrails:
 
-- `.env` is listed in `.gitignore` and is **never committed**.
-- Only `.env.example` (with placeholder values) lives in the repo.
-- To run the benchmark you must:
-  1. Copy `.env.example` to `.env`
-  2. Replace the placeholder value with your real `ANTHROPIC_API_KEY`
-  3. Save the file as **UTF-8** (not UTF-16) — Windows Notepad may default to UTF-16 with BOM,
-     which will break the dotenv loader.
-- **Never run `git add .env`** — if you do, rotate your key immediately.
+- **Wall-clock timeout** (5 s default) — subprocess is killed if exceeded
+- **Restricted `__builtins__`** — `__import__`, `open`, `eval`, `exec`, `getattr` removed
+- **Isolated environment** — clean env dict, neutral cwd, `python -I` (ignores PYTHONPATH/site-packages from parent)
+
+CPU/memory caps and network egress are not enforced (no `resource` module on Windows).
+For production, use Cloudflare Workers, Pyodide-in-WASM, or Docker-per-call.
 
 ---
 
-## Installation and Usage
+## Secrets warning
+
+`.env` is in `.gitignore` and never committed. To run the benchmark:
+
+1. Copy `.env.example` to `.env`
+2. Set `ANTHROPIC_API_KEY` to your real key
+3. Save as **UTF-8** (not UTF-16 — Windows Notepad may default to UTF-16 with BOM)
+
+---
+
+## Installation and usage
 
 ```bash
-# Install (from repo root, using existing venv):
+# Install (venv must be active or use full path):
 codemodevenv\Scripts\python.exe -m pip install -e ".[dev]"
 
-# Run tests:
+# Verify tests pass:
 codemodevenv\Scripts\python.exe -m pytest tests/ -v
 
-# Run a server standalone (Ctrl-C to stop):
+# Run Flask standalone (Ctrl-C to stop):
+codemodevenv\Scripts\python.exe -m mlops_backend.flask_app
+
+# Run an MCP server standalone (Flask must be running first):
 codemodevenv\Scripts\python.exe -m servers.rest_mirror_server
 codemodevenv\Scripts\python.exe -m servers.task_oriented_server
-codemodevenv\Scripts\python.exe -m servers.classic_server
-codemodevenv\Scripts\python.exe -m servers.codemode_server
+codemodevenv\Scripts\python.exe -m servers.task_codemode_server
 
-# Run the full 4-server benchmark (requires ANTHROPIC_API_KEY in .env):
+# Run the full 3-server benchmark (starts Flask automatically):
 codemodevenv\Scripts\python.exe -m bench.run_benchmark
 
-# Run only the REST-mirror vs task-oriented comparison:
-codemodevenv\Scripts\python.exe -m bench.run_benchmark --servers rest_mirror task_oriented
-
-# Run a single scenario for quick testing:
+# Subset — comparison #1 only, one scenario:
 codemodevenv\Scripts\python.exe -m bench.run_benchmark --servers rest_mirror task_oriented --scenarios failed_jobs_triage
+
+# Comparison #2 only, novel scenario:
+codemodevenv\Scripts\python.exe -m bench.run_benchmark --servers task_oriented task_codemode --scenarios model_failure_by_dataset
 
 # Generate report from a saved run:
 codemodevenv\Scripts\python.exe -m bench.report bench/results/<timestamp>
@@ -174,5 +169,5 @@ codemodevenv\Scripts\python.exe -m bench.report bench/results/<timestamp>
 
 _(Run the benchmark to populate this section.)_
 
-<!-- After running the benchmark, paste the table from
+<!-- After running the benchmark, paste the Headline deltas + Totals table from
      bench/results/<timestamp>/report.md here. -->

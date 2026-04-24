@@ -2,7 +2,7 @@
 __builtins__ and only `mlops` pre-imported, emits JSON result on stdout.
 Never import this module into the parent process."""
 import builtins, contextlib, io, json, sys, traceback
-from mlops_backend import api as mlops
+from servers import mlops
 
 _SAFE_NAMES = [
     "abs","all","any","ascii","bin","bool","bytes","callable","chr",

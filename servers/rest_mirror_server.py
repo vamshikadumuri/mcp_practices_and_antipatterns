@@ -11,7 +11,7 @@ calls them. That full schema ships as part of the tools context on every
 API turn, regardless of which tools the agent actually uses.
 """
 from fastmcp import FastMCP
-from mlops_backend import rest_api
+from mlops_backend import api
 
 mcp = FastMCP("mlops-rest-mirror")
 
@@ -65,7 +65,7 @@ def mlops_batch_jobs_list(
         {"count": 42, "next": "http://api.local/batch_jobs/?page=2", "previous": null,
          "results": [{"job_id": "bj-0001", "status": "FAILED", ...}]}
     """
-    return rest_api.list_batch_jobs(status, model_id, submitted_after, page, page_size)
+    return api.list_batch_jobs(status, model_id, submitted_after, page, page_size)
 
 
 @mcp.tool
@@ -86,7 +86,7 @@ def mlops_batch_jobs_retrieve(job_id: str) -> dict:
 
     Response (404 Not Found): {"detail": "Not found."}
     """
-    return rest_api.retrieve_batch_job(job_id)
+    return api.retrieve_batch_job(job_id)
 
 
 @mcp.tool
@@ -104,7 +104,7 @@ def mlops_batch_jobs_create(model_id: str, dataset_id: str, shards_total: int = 
 
     Response (400 Bad Request): {"model_id": ["This field is required."]}
     """
-    return rest_api.create_batch_job(model_id, dataset_id, shards_total)
+    return api.create_batch_job(model_id, dataset_id, shards_total)
 
 
 @mcp.tool
@@ -118,7 +118,7 @@ def mlops_batch_jobs_destroy(job_id: str) -> dict:
     Response (200 OK): {"job_id": "...", "status": "CANCELLED"}
     Response (404 Not Found): {"detail": "Not found."}
     """
-    return rest_api.destroy_batch_job(job_id)
+    return api.destroy_batch_job(job_id)
 
 
 @mcp.tool
@@ -140,7 +140,7 @@ def mlops_batch_jobs_logs_retrieve(job_id: str, lines: int = 50) -> dict:
 
     Response (404 Not Found): {"detail": "Not found."}
     """
-    return rest_api.retrieve_batch_job_logs(job_id, lines)
+    return api.retrieve_batch_job_logs(job_id, lines)
 
 
 @mcp.tool
@@ -164,7 +164,7 @@ def mlops_batch_jobs_retry_shards_create(job_id: str) -> dict:
     Response (400 Bad Request): {"detail": "Job has no failed shards."}
     Response (404 Not Found): {"detail": "Not found."}
     """
-    return rest_api.retry_batch_job_shards(job_id)
+    return api.retry_batch_job_shards(job_id)
 
 
 # ---------------------------------------------------------------------------
@@ -187,7 +187,7 @@ def mlops_models_list(page: int = 1, page_size: int = 20) -> dict:
         model_id (string), name (string), version (string),
         framework (string|null), status (string), created_at (string[$date-time])
     """
-    return rest_api.list_models(page, page_size)
+    return api.list_models(page, page_size)
 
 
 @mcp.tool
@@ -202,7 +202,7 @@ def mlops_models_retrieve(model_id: str) -> dict:
     Response (200 OK): Model object.
     Response (404 Not Found): {"detail": "Not found."}
     """
-    return rest_api.retrieve_model(model_id)
+    return api.retrieve_model(model_id)
 
 
 @mcp.tool
@@ -217,7 +217,7 @@ def mlops_models_create(name: str, version: str) -> dict:
     Response (201 Created): Model object with status "registered".
     Response (400 Bad Request): Validation errors.
     """
-    return rest_api.create_model(name, version)
+    return api.create_model(name, version)
 
 
 @mcp.tool
@@ -234,7 +234,7 @@ def mlops_models_partial_update(model_id: str, status: str | None = None, name: 
     Response (404 Not Found): {"detail": "Not found."}
     """
     fields = {k: v for k, v in {"status": status, "name": name}.items() if v is not None}
-    return rest_api.partial_update_model(model_id, **fields)
+    return api.partial_update_model(model_id, **fields)
 
 
 # ---------------------------------------------------------------------------
@@ -257,7 +257,7 @@ def mlops_datasets_list(page: int = 1, page_size: int = 20) -> dict:
         dataset_id (string), name (string), row_count (integer|null),
         format (string|null), created_at (string[$date-time])
     """
-    return rest_api.list_datasets(page, page_size)
+    return api.list_datasets(page, page_size)
 
 
 @mcp.tool
@@ -272,7 +272,7 @@ def mlops_datasets_retrieve(dataset_id: str) -> dict:
     Response (200 OK): Dataset object.
     Response (404 Not Found): {"detail": "Not found."}
     """
-    return rest_api.retrieve_dataset(dataset_id)
+    return api.retrieve_dataset(dataset_id)
 
 
 # ---------------------------------------------------------------------------
@@ -298,7 +298,7 @@ def mlops_endpoints_list(status: str | None = None, page: int = 1, page_size: in
         status (string), environment (string), traffic_splits (object|null),
         created_at (string[$date-time])
     """
-    return rest_api.list_endpoints(status, page, page_size)
+    return api.list_endpoints(status, page, page_size)
 
 
 @mcp.tool
@@ -313,7 +313,7 @@ def mlops_endpoints_retrieve(endpoint_id: str) -> dict:
     Response (200 OK): Endpoint object.
     Response (404 Not Found): {"detail": "Not found."}
     """
-    return rest_api.retrieve_endpoint(endpoint_id)
+    return api.retrieve_endpoint(endpoint_id)
 
 
 @mcp.tool
@@ -328,7 +328,7 @@ def mlops_endpoints_create(name: str, model_id: str) -> dict:
     Response (201 Created): Endpoint object with status PENDING.
     Response (400 Bad Request): Validation errors.
     """
-    return rest_api.create_endpoint(name, model_id)
+    return api.create_endpoint(name, model_id)
 
 
 @mcp.tool
@@ -342,7 +342,7 @@ def mlops_endpoints_destroy(endpoint_id: str) -> dict:
     Response (200 OK): {"endpoint_id": "...", "status": "DECOMMISSIONED"}
     Response (404 Not Found): {"detail": "Not found."}
     """
-    return rest_api.destroy_endpoint(endpoint_id)
+    return api.destroy_endpoint(endpoint_id)
 
 
 @mcp.tool
@@ -363,7 +363,7 @@ def mlops_endpoints_partial_update(
     Response (404 Not Found): {"detail": "Not found."}
     """
     fields = {k: v for k, v in {"name": name, "model_id": model_id}.items() if v is not None}
-    return rest_api.partial_update_endpoint(endpoint_id, **fields)
+    return api.partial_update_endpoint(endpoint_id, **fields)
 
 
 @mcp.tool
@@ -393,7 +393,7 @@ def mlops_endpoints_metrics_list(
          "results": [{"endpoint_id": "ep-prod-chat", "date": "2026-04-22",
                       "qps": 188.7, "p50_ms": 388, "p99_ms": 2100, ...}]}
     """
-    return rest_api.list_endpoint_metrics(endpoint_id, days, page, page_size)
+    return api.list_endpoint_metrics(endpoint_id, days, page, page_size)
 
 
 @mcp.tool
@@ -414,7 +414,7 @@ def mlops_endpoints_logs_retrieve(endpoint_id: str, lines: int = 50) -> dict:
 
     Response (404 Not Found): {"detail": "Not found."}
     """
-    return rest_api.retrieve_endpoint_logs(endpoint_id, lines)
+    return api.retrieve_endpoint_logs(endpoint_id, lines)
 
 
 @mcp.tool
@@ -435,7 +435,7 @@ def mlops_endpoints_traffic_partial_update(endpoint_id: str, splits: dict) -> di
     Response (400 Bad Request): {"detail": "Percentages must sum to 100."}
     Response (404 Not Found): {"detail": "Not found."}
     """
-    return rest_api.update_endpoint_traffic(endpoint_id, splits)
+    return api.update_endpoint_traffic(endpoint_id, splits)
 
 
 # ---------------------------------------------------------------------------
@@ -472,7 +472,7 @@ def mlops_alerts_list(
         {"count": 5, "next": null, "previous": null,
          "results": [{"alert_id": "alert-001", "severity": "HIGH", ...}]}
     """
-    return rest_api.list_alerts(severity, fired_after, page, page_size)
+    return api.list_alerts(severity, fired_after, page, page_size)
 
 
 @mcp.tool
@@ -487,7 +487,7 @@ def mlops_alerts_retrieve(alert_id: str) -> dict:
     Response (200 OK): Alert object.
     Response (404 Not Found): {"detail": "Not found."}
     """
-    return rest_api.retrieve_alert(alert_id)
+    return api.retrieve_alert(alert_id)
 
 
 if __name__ == "__main__":

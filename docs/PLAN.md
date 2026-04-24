@@ -1,5 +1,11 @@
 # MCP Code Mode Demo — Implementation Plan
 
+> **Note:** This is the original four-server build plan. The live demo now runs a real Flask
+> backend, keeps `mlops_backend/api.py` as a pure REST client (1:1 with Flask),
+> puts MCP-side helpers in `servers/mlops.py`, and has three servers
+> (`rest_mirror`, `task_oriented`, `task_codemode`) with two focused comparisons —
+> see `README.md`.
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Build two FastMCP servers over the same synthetic ML-ops dataset — a classic tool-per-operation server and a Code Mode server exposing `list_api` + `execute_python` — plus a benchmark harness that runs identical prompts through both via the Anthropic API and reports token deltas, so the team can see Code Mode's token savings on apples-to-apples scenarios.

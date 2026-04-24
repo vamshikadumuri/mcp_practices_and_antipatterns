@@ -10,6 +10,8 @@ def run_sandboxed(code: str, timeout: float = 5.0) -> str:
     env = {"PYTHONPATH": str(_REPO_ROOT)}
     if sys.platform == "win32" and "SystemRoot" in os.environ:
         env["SystemRoot"] = os.environ["SystemRoot"]
+    if "MLOPS_API_URL" in os.environ:
+        env["MLOPS_API_URL"] = os.environ["MLOPS_API_URL"]
     try:
         r = subprocess.run(
             [sys.executable, "-I", str(_RUNNER)],

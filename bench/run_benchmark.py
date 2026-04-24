@@ -5,16 +5,16 @@ from dotenv import load_dotenv
 from anthropic import Anthropic
 from mcp import ClientSession, StdioServerParameters, stdio_client
 from bench.scenarios import SCENARIOS
+from bench import flask_fixture
 
 load_dotenv()
 MODEL = os.getenv("BENCH_MODEL", "claude-sonnet-4-6")
 MAX_TURNS = 20
 
 SERVERS = {
-    "classic":       ["-m", "servers.classic_server"],
-    "codemode":      ["-m", "servers.codemode_server"],
     "rest_mirror":   ["-m", "servers.rest_mirror_server"],
     "task_oriented": ["-m", "servers.task_oriented_server"],
+    "task_codemode": ["-m", "servers.task_codemode_server"],
 }
 
 def mcp_tools_to_anthropic(tools):
@@ -85,13 +85,17 @@ async def main():
     args = ap.parse_args()
 
     run_dir = Path("bench/results") / datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
+    run_dir.mkdir(parents=True, exist_ok=True)
     selected = [s for s in SCENARIOS if s["id"] in args.scenarios]
-    for server_key in args.servers:
-        for scenario in selected:
-            print(f"[{server_key}] {scenario['id']} ...", flush=True)
-            rec = await run_scenario(server_key, scenario, run_dir)
-            print(f"  turns={rec['turns']} in={rec['usage']['input_tokens']} "
-                  f"out={rec['usage']['output_tokens']} t={rec['wall_seconds']}s")
+
+    with flask_fixture.running(log_path=run_dir / "flask.log") as info:
+        os.environ["MLOPS_API_URL"] = info.url
+        for server_key in args.servers:
+            for scenario in selected:
+                print(f"[{server_key}] {scenario['id']} ...", flush=True)
+                rec = await run_scenario(server_key, scenario, run_dir)
+                print(f"  turns={rec['turns']} in={rec['usage']['input_tokens']} "
+                      f"out={rec['usage']['output_tokens']} t={rec['wall_seconds']}s")
     print(f"\nResults: {run_dir}")
 
 if __name__ == "__main__":
