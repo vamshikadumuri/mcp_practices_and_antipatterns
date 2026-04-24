@@ -309,6 +309,35 @@ def alerts_retrieve(alert_id):
 
 
 # ---------------------------------------------------------------------------
+# Deploys
+# ---------------------------------------------------------------------------
+
+@app.route("/deploys/")
+def deploys_list():
+    endpoint_id = request.args.get("endpoint_id")
+    deployed_after = request.args.get("deployed_after")
+    page = int(request.args.get("page", 1))
+    page_size = int(request.args.get("page_size", 20))
+
+    rows = data.load("deploys")
+    if endpoint_id:
+        rows = [r for r in rows if r["endpoint_id"] == endpoint_id]
+    if deployed_after:
+        cutoff = datetime.fromisoformat(deployed_after.replace("Z", "+00:00"))
+        rows = [r for r in rows
+                if datetime.fromisoformat(r["deployed_at"].replace("Z", "+00:00")) >= cutoff]
+    return jsonify(_paginate(rows, page, page_size, "/deploys/"))
+
+
+@app.route("/deploys/<deploy_id>/")
+def deploys_retrieve(deploy_id):
+    for r in data.load("deploys"):
+        if r["deploy_id"] == deploy_id:
+            return jsonify(r)
+    return _not_found()
+
+
+# ---------------------------------------------------------------------------
 # Entry point
 # ---------------------------------------------------------------------------
 

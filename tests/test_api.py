@@ -69,3 +69,20 @@ def test_retrieve_endpoint_logs_returns_content_dict():
 def test_list_alerts_returns_pagination_envelope():
     result = api.list_alerts()
     assert "count" in result and "results" in result
+
+
+def test_list_deploys_returns_pagination_envelope():
+    result = api.list_deploys()
+    assert "count" in result and "results" in result
+    assert len(result["results"]) > 0
+
+
+def test_list_deploys_filter_by_endpoint():
+    result = api.list_deploys(endpoint_id="ep-prod-chat")
+    assert all(d["endpoint_id"] == "ep-prod-chat" for d in result["results"])
+
+
+def test_retrieve_deploy_returns_raw_dict():
+    d = api.retrieve_deploy("dep-001")
+    assert d["deploy_id"] == "dep-001"
+    assert "count" not in d

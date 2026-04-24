@@ -84,7 +84,7 @@ on every turn. The task tool returns the complete answer in one call.
 
 ## Comparison #2 — Task-oriented vs. Task-oriented + Code Mode
 
-The `task_codemode_server` carries the same 6 task tools plus two Code Mode tools:
+The `task_codemode_server` carries the same 6 task tools plus two Code Mode tools. The benchmark ships **13 scenarios in total**: 6 covered by pre-designed task tools and 7 novel workflows (team cost attribution, alert fatigue, GPU efficiency, shard stability, canary audit, LLM token economics, post-deploy alert correlation) that have no matching task tool — so `task_oriented` must stitch primitives while `task_codemode` writes one `execute_python` snippet.
 
 | Tool | Purpose |
 |---|---|
@@ -159,8 +159,11 @@ codemodevenv\Scripts\python.exe -m bench.run_benchmark
 # Subset — comparison #1 only, one scenario:
 codemodevenv\Scripts\python.exe -m bench.run_benchmark --servers rest_mirror task_oriented --scenarios failed_jobs_triage
 
-# Comparison #2 only, novel scenario:
+# Comparison #2 only, one scenario:
 codemodevenv\Scripts\python.exe -m bench.run_benchmark --servers task_oriented task_codemode --scenarios model_failure_by_dataset
+
+# Novel scenarios that stress-test Code Mode (no matching task tool exists):
+codemodevenv\Scripts\python.exe -m bench.run_benchmark --servers task_oriented task_codemode --scenarios team_cost_attribution alert_fatigue_analysis gpu_efficiency_per_model shard_stability_audit canary_traffic_split_audit llm_token_economics post_deploy_alert_correlation
 
 # Generate report from a saved run:
 codemodevenv\Scripts\python.exe -m bench.report bench/results/<timestamp>

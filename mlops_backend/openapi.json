@@ -839,6 +839,89 @@
         }
       }
     },
+    "/deploys/": {
+      "get": {
+        "operationId": "mlops_deploys_list",
+        "summary": "List model deploys",
+        "description": "Returns a paginated list of Deploy objects. Optionally filter by endpoint_id or deployed_after datetime. deployed_after is an ISO 8601 datetime string; only deploys at or after that time are returned.",
+        "tags": ["deploys"],
+        "parameters": [
+          {
+            "name": "endpoint_id",
+            "in": "query",
+            "required": false,
+            "description": "Filter by endpoint identifier.",
+            "schema": { "type": "string" }
+          },
+          {
+            "name": "deployed_after",
+            "in": "query",
+            "required": false,
+            "description": "Return only deploys at or after this ISO 8601 datetime. Example: \"2026-04-09T00:00:00Z\".",
+            "schema": { "type": "string", "format": "date-time" }
+          },
+          {
+            "name": "page",
+            "in": "query",
+            "required": false,
+            "description": "Page number. Default: 1.",
+            "schema": { "type": "integer", "default": 1 }
+          },
+          {
+            "name": "page_size",
+            "in": "query",
+            "required": false,
+            "description": "Results per page. Default: 20.",
+            "schema": { "type": "integer", "default": 20 }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Paginated list of deploys.",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/PaginatedDeployList" }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/deploys/{deploy_id}/": {
+      "get": {
+        "operationId": "mlops_deploys_retrieve",
+        "summary": "Retrieve a single deploy",
+        "description": "Returns the Deploy object for the given deploy_id. Returns 404 if the deploy does not exist.",
+        "tags": ["deploys"],
+        "parameters": [
+          {
+            "name": "deploy_id",
+            "in": "path",
+            "required": true,
+            "description": "Unique deploy identifier. Example: \"dep-001\".",
+            "schema": { "type": "string" }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Deploy object.",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/Deploy" }
+              }
+            }
+          },
+          "404": {
+            "description": "Not found.",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/ErrorDetail" }
+              }
+            }
+          }
+        }
+      }
+    },
     "/alerts/{alert_id}/": {
       "get": {
         "operationId": "mlops_alerts_retrieve",
@@ -1186,6 +1269,30 @@
           "next": { "type": "string", "nullable": true, "description": "URL of the next page, or null." },
           "previous": { "type": "string", "nullable": true, "description": "URL of the previous page, or null." },
           "results": { "type": "array", "items": { "$ref": "#/components/schemas/Alert" } }
+        },
+        "required": ["count", "results"]
+      },
+      "Deploy": {
+        "type": "object",
+        "description": "Represents a model deploy event to an endpoint.",
+        "properties": {
+          "deploy_id": { "type": "string", "description": "Unique deploy identifier." },
+          "endpoint_id": { "type": "string", "description": "Endpoint that was updated." },
+          "model_id": { "type": "string", "description": "Model version deployed." },
+          "previous_model_id": { "type": "string", "nullable": true, "description": "Model version replaced, or null for initial deploys." },
+          "deployed_at": { "type": "string", "format": "date-time", "description": "ISO 8601 datetime when the deploy completed." },
+          "deployed_by": { "type": "string", "description": "User or system that triggered the deploy." }
+        },
+        "required": ["deploy_id", "endpoint_id", "model_id", "deployed_at", "deployed_by"]
+      },
+      "PaginatedDeployList": {
+        "type": "object",
+        "description": "Paginated list of Deploy objects.",
+        "properties": {
+          "count": { "type": "integer", "description": "Total number of matching items." },
+          "next": { "type": "string", "nullable": true, "description": "URL of the next page, or null." },
+          "previous": { "type": "string", "nullable": true, "description": "URL of the previous page, or null." },
+          "results": { "type": "array", "items": { "$ref": "#/components/schemas/Deploy" } }
         },
         "required": ["count", "results"]
       }

@@ -106,3 +106,25 @@ def test_batch_jobs_create_stub(base):
     resp, status = _post(f"{base}/batch_jobs/", {"model_id": "m-test", "dataset_id": "ds-test"})
     assert status == 201
     assert resp["status"] == "PENDING"
+
+
+def test_deploys_list_pagination_envelope(base):
+    data = _get(f"{base}/deploys/")
+    assert "count" in data and "results" in data
+    assert len(data["results"]) > 0
+
+
+def test_deploys_list_filter_by_endpoint(base):
+    data = _get(f"{base}/deploys/?endpoint_id=ep-prod-chat")
+    assert all(r["endpoint_id"] == "ep-prod-chat" for r in data["results"])
+    assert len(data["results"]) > 0
+
+
+def test_deploys_retrieve(base):
+    data = _get(f"{base}/deploys/dep-001/")
+    assert data["deploy_id"] == "dep-001"
+    assert "deployed_at" in data
+
+
+def test_deploys_retrieve_404(base):
+    assert _get_404(f"{base}/deploys/no-such-deploy/") == 404

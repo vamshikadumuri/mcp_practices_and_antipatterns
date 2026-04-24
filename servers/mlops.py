@@ -89,6 +89,12 @@ def list_alerts(severity=None):
     """Return all alerts as a flat list, optionally filtered by severity."""
     return _collect(lambda p: _api.list_alerts(severity=severity, page=p, page_size=100))
 
+def list_deploys(endpoint_id=None, since_hours=None):
+    """Return all deploys as a flat list, optionally filtered by endpoint_id or a since_hours window."""
+    da = _since_hours_iso(since_hours) if since_hours else None
+    return _collect(lambda p: _api.list_deploys(
+        endpoint_id=endpoint_id, deployed_after=da, page=p, page_size=100))
+
 def compare_runs(job_ids):
     """Compare multiple batch jobs by gpu_hours, cost_usd, and status."""
     jobs = [get_batch_job(j) for j in job_ids]

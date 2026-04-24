@@ -61,7 +61,7 @@ _CODEMODE_API = [
     "list_batch_jobs", "get_batch_job", "get_batch_job_logs", "retry_failed_shards",
     "list_models", "get_model", "list_datasets", "get_dataset",
     "list_endpoints", "get_endpoint", "get_endpoint_metrics",
-    "update_traffic_split", "tail_endpoint_logs", "list_alerts", "compare_runs",
+    "update_traffic_split", "tail_endpoint_logs", "list_alerts", "list_deploys", "compare_runs",
     "triage_failed_batch_jobs", "endpoint_latency_trends", "model_cost_report",
     "correlate_alerts_with_metrics", "compare_recent_failed_jobs", "apply_traffic_split",
 ]

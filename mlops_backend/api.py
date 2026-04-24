@@ -8,28 +8,31 @@ or aggregated here — that is MCP-server code's job.
 import os
 import requests
 
-_BASE = os.getenv("MLOPS_API_URL", "http://127.0.0.1:7319")
 _TIMEOUT = 10.0
+
+
+def _base():
+    return os.getenv("MLOPS_API_URL", "http://127.0.0.1:7319")
 
 
 def _get(path, **params):
     params = {k: v for k, v in params.items() if v is not None}
-    r = requests.get(f"{_BASE}{path}", params=params, timeout=_TIMEOUT)
+    r = requests.get(f"{_base()}{path}", params=params, timeout=_TIMEOUT)
     r.raise_for_status()
     return r.json()
 
 def _post(path, json=None):
-    r = requests.post(f"{_BASE}{path}", json=json, timeout=_TIMEOUT)
+    r = requests.post(f"{_base()}{path}", json=json, timeout=_TIMEOUT)
     r.raise_for_status()
     return r.json()
 
 def _patch(path, json=None):
-    r = requests.patch(f"{_BASE}{path}", json=json, timeout=_TIMEOUT)
+    r = requests.patch(f"{_base()}{path}", json=json, timeout=_TIMEOUT)
     r.raise_for_status()
     return r.json()
 
 def _delete(path):
-    r = requests.delete(f"{_BASE}{path}", timeout=_TIMEOUT)
+    r = requests.delete(f"{_base()}{path}", timeout=_TIMEOUT)
     r.raise_for_status()
     return r.json()
 
@@ -116,3 +119,13 @@ def list_alerts(severity=None, fired_after=None, page=1, page_size=20):
 
 def retrieve_alert(alert_id):
     return _get(f"/alerts/{alert_id}/")
+
+
+# --- Deploys ---------------------------------------------------------------
+
+def list_deploys(endpoint_id=None, deployed_after=None, page=1, page_size=20):
+    return _get("/deploys/", endpoint_id=endpoint_id, deployed_after=deployed_after,
+                page=page, page_size=page_size)
+
+def retrieve_deploy(deploy_id):
+    return _get(f"/deploys/{deploy_id}/")

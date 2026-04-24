@@ -1,0 +1,82 @@
+[
+  {
+    "deploy_id": "dep-001",
+    "endpoint_id": "ep-prod-chat",
+    "model_id": "m-llama3-8b-ft-v2",
+    "previous_model_id": "m-llama3-8b-ft",
+    "deployed_at": "2026-04-20T06:30:00Z",
+    "deployed_by": "ci-bot"
+  },
+  {
+    "deploy_id": "dep-002",
+    "endpoint_id": "ep-prod-legal",
+    "model_id": "m-llama3-8b-ft-v2",
+    "previous_model_id": "m-llama3-8b-ft",
+    "deployed_at": "2026-04-19T13:00:00Z",
+    "deployed_by": "nlp-team"
+  },
+  {
+    "deploy_id": "dep-003",
+    "endpoint_id": "ep-prod-legal",
+    "model_id": "m-phi2-ft",
+    "previous_model_id": "m-llama3-8b-ft-v2",
+    "deployed_at": "2026-04-20T09:45:00Z",
+    "deployed_by": "ci-bot"
+  },
+  {
+    "deploy_id": "dep-004",
+    "endpoint_id": "ep-prod-code",
+    "model_id": "m-mistral-7b-ft",
+    "previous_model_id": "m-mistral-7b-ft",
+    "deployed_at": "2026-04-15T10:00:00Z",
+    "deployed_by": "dev-tools-team"
+  },
+  {
+    "deploy_id": "dep-005",
+    "endpoint_id": "ep-prod-medical",
+    "model_id": "m-gemma2-9b-ft",
+    "previous_model_id": "m-llama3-8b-ft",
+    "deployed_at": "2026-04-12T14:30:00Z",
+    "deployed_by": "healthcare-team"
+  },
+  {
+    "deploy_id": "dep-006",
+    "endpoint_id": "ep-prod-chat",
+    "model_id": "m-llama3-8b-ft",
+    "previous_model_id": null,
+    "deployed_at": "2026-04-10T08:00:00Z",
+    "deployed_by": "platform-team"
+  },
+  {
+    "deploy_id": "dep-007",
+    "endpoint_id": "ep-staging-chat",
+    "model_id": "m-phi2-ft",
+    "previous_model_id": null,
+    "deployed_at": "2026-04-08T16:00:00Z",
+    "deployed_by": "platform-team"
+  },
+  {
+    "deploy_id": "dep-008",
+    "endpoint_id": "ep-prod-code",
+    "model_id": "m-mistral-7b-ft",
+    "previous_model_id": null,
+    "deployed_at": "2026-04-05T09:00:00Z",
+    "deployed_by": "dev-tools-team"
+  },
+  {
+    "deploy_id": "dep-009",
+    "endpoint_id": "ep-prod-medical",
+    "model_id": "m-gemma2-9b-ft",
+    "previous_model_id": null,
+    "deployed_at": "2026-04-01T11:00:00Z",
+    "deployed_by": "healthcare-team"
+  },
+  {
+    "deploy_id": "dep-010",
+    "endpoint_id": "ep-prod-chat",
+    "model_id": "m-llama3-8b-ft",
+    "previous_model_id": null,
+    "deployed_at": "2026-03-28T07:00:00Z",
+    "deployed_by": "platform-team"
+  }
+]

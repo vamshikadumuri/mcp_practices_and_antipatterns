@@ -45,4 +45,63 @@ SCENARIOS = [
             "by failure_reason."
         ),
     },
+    {
+        "id": "team_cost_attribution",
+        "prompt": (
+            "For each team (the owner field on a model), compute the total GPU-hours and "
+            "total cost_usd across all batch jobs run on models they own. Rank teams by "
+            "total cost descending and call out the single highest-spending team."
+        ),
+    },
+    {
+        "id": "alert_fatigue_analysis",
+        "prompt": (
+            "Over the last 14 days, count how often each distinct alert message fires and "
+            "which endpoint generates the most alerts. Identify the top 3 noisiest "
+            "(message, endpoint_id) pairs by fire count."
+        ),
+    },
+    {
+        "id": "gpu_efficiency_per_model",
+        "prompt": (
+            "For each model, compute GPU-hours per successfully-completed shard: "
+            "sum gpu_hours over SUCCEEDED jobs divided by sum of (shards_total - shards_failed). "
+            "Rank models from most to least efficient and flag any whose value exceeds 0.5 "
+            "GPU-hours per shard."
+        ),
+    },
+    {
+        "id": "shard_stability_audit",
+        "prompt": (
+            "For every model, compute the average shards_failed / shards_total ratio "
+            "across its FAILED batch jobs. Flag any model whose average exceeds 20% and "
+            "show the count of FAILED jobs contributing to that average."
+        ),
+    },
+    {
+        "id": "canary_traffic_split_audit",
+        "prompt": (
+            "List every endpoint currently serving traffic across more than one model "
+            "version (traffic_split has more than one key). For each, show the split "
+            "percentages and the p99 latency trend over the last 7 days. Flag any "
+            "endpoint whose p99 trended upward day-over-day."
+        ),
+    },
+    {
+        "id": "llm_token_economics",
+        "prompt": (
+            "For each endpoint, compute total tokens_out over the last 7 days and the "
+            "average daily growth rate. Rank endpoints by total output tokens and flag "
+            "any whose daily tokens_out grew by more than 20% over the window."
+        ),
+    },
+    {
+        "id": "post_deploy_alert_correlation",
+        "prompt": (
+            "For every HIGH-severity alert fired in the last 14 days, check whether a "
+            "deploy to that same endpoint occurred within the 2 hours immediately before "
+            "the alert. List each alert with its suspected triggering deploy (if any) and "
+            "summarise what fraction of HIGH alerts appear deploy-related."
+        ),
+    },
 ]
