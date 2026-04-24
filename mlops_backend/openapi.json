@@ -1,0 +1,1194 @@
+{
+  "openapi": "3.0.3",
+  "info": {
+    "title": "MLOps Backend API",
+    "version": "1.0.0",
+    "description": "REST API for the MLOps platform. Manages batch inference jobs, registered ML models, datasets, online serving endpoints, endpoint metrics, and alerting. Follows DRF-style conventions: list endpoints return paginated envelopes, write endpoints accept JSON bodies, all identifiers are string slugs."
+  },
+  "servers": [
+    { "url": "http://127.0.0.1:7319", "description": "Local development server (overridden at runtime via MLOPS_API_URL)" }
+  ],
+  "paths": {
+    "/batch_jobs/": {
+      "get": {
+        "operationId": "mlops_batch_jobs_list",
+        "summary": "List batch inference jobs",
+        "description": "Returns a paginated list of BatchJob objects, optionally filtered by status, model, or submission time. Pagination uses page/page_size query parameters. The response envelope includes count (total matching items), next (URL of next page or null), previous (URL of previous page or null), and results (array of BatchJob objects).",
+        "tags": ["batch_jobs"],
+        "parameters": [
+          {
+            "name": "status",
+            "in": "query",
+            "required": false,
+            "description": "Filter by job status. Enum: PENDING, RUNNING, SUCCEEDED, FAILED, CANCELLED.",
+            "schema": { "type": "string", "enum": ["PENDING", "RUNNING", "SUCCEEDED", "FAILED", "CANCELLED"] }
+          },
+          {
+            "name": "model_id",
+            "in": "query",
+            "required": false,
+            "description": "Filter by model identifier. Example: \"m-llama3-8b-ft\".",
+            "schema": { "type": "string" }
+          },
+          {
+            "name": "submitted_after",
+            "in": "query",
+            "required": false,
+            "description": "Return only jobs submitted after this ISO 8601 datetime. Example: \"2026-04-20T00:00:00Z\".",
+            "schema": { "type": "string", "format": "date-time" }
+          },
+          {
+            "name": "page",
+            "in": "query",
+            "required": false,
+            "description": "Page number within the paginated result set. Default: 1.",
+            "schema": { "type": "integer", "default": 1 }
+          },
+          {
+            "name": "page_size",
+            "in": "query",
+            "required": false,
+            "description": "Number of results per page. Default: 20. Maximum: 100.",
+            "schema": { "type": "integer", "default": 20, "maximum": 100 }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Paginated list of batch jobs.",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/PaginatedBatchJobList" }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "operationId": "mlops_batch_jobs_create",
+        "summary": "Submit a new batch inference job",
+        "description": "Creates and queues a new batch inference job. The job starts in PENDING status. model_id and dataset_id are required. shards_total controls how many parallel shards the job is split into (default 16).",
+        "tags": ["batch_jobs"],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": { "$ref": "#/components/schemas/BatchJobCreate" }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Batch job created with status PENDING.",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/BatchJob" }
+              }
+            }
+          },
+          "400": {
+            "description": "Validation error.",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/ErrorDetail" }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/batch_jobs/{job_id}/": {
+      "get": {
+        "operationId": "mlops_batch_jobs_retrieve",
+        "summary": "Retrieve a single batch inference job",
+        "description": "Returns the BatchJob object for the given job_id. Returns 404 if the job does not exist.",
+        "tags": ["batch_jobs"],
+        "parameters": [
+          {
+            "name": "job_id",
+            "in": "path",
+            "required": true,
+            "description": "Unique identifier for the BatchJob. Example: \"bj-0001\".",
+            "schema": { "type": "string" }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "BatchJob object.",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/BatchJob" }
+              }
+            }
+          },
+          "404": {
+            "description": "Not found.",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/ErrorDetail" }
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "operationId": "mlops_batch_jobs_destroy",
+        "summary": "Cancel and delete a batch job",
+        "description": "Cancels the running job and marks it CANCELLED. Returns the job_id and final status. Returns 404 if the job does not exist.",
+        "tags": ["batch_jobs"],
+        "parameters": [
+          {
+            "name": "job_id",
+            "in": "path",
+            "required": true,
+            "description": "Unique identifier for the BatchJob.",
+            "schema": { "type": "string" }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Job cancelled.",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/BatchJobCancelled" }
+              }
+            }
+          },
+          "404": {
+            "description": "Not found.",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/ErrorDetail" }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/batch_jobs/{job_id}/logs/": {
+      "get": {
+        "operationId": "mlops_batch_jobs_logs_retrieve",
+        "summary": "Retrieve recent log lines for a batch job",
+        "description": "Tails the most recent log lines for the given batch job. The lines parameter controls how many log lines are returned (default 50, maximum 500). Returns the log content as a newline-separated string in the content field.",
+        "tags": ["batch_jobs"],
+        "parameters": [
+          {
+            "name": "job_id",
+            "in": "path",
+            "required": true,
+            "description": "Unique identifier for the BatchJob.",
+            "schema": { "type": "string" }
+          },
+          {
+            "name": "lines",
+            "in": "query",
+            "required": false,
+            "description": "Number of log tail lines to return. Default: 50. Maximum: 500.",
+            "schema": { "type": "integer", "default": 50, "maximum": 500 }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Log content for the batch job.",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/JobLogs" }
+              }
+            }
+          },
+          "404": {
+            "description": "Not found.",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/ErrorDetail" }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/batch_jobs/{job_id}/retry_shards/": {
+      "post": {
+        "operationId": "mlops_batch_jobs_retry_shards_create",
+        "summary": "Retry only the failed shards of a batch job",
+        "description": "Creates a new child job containing only the shards that failed in the original job. Returns 400 if the job has no failed shards. Returns 404 if the job does not exist. The new_job_id field in the response is the identifier of the newly created retry job.",
+        "tags": ["batch_jobs"],
+        "parameters": [
+          {
+            "name": "job_id",
+            "in": "path",
+            "required": true,
+            "description": "Unique identifier of the parent BatchJob.",
+            "schema": { "type": "string" }
+          }
+        ],
+        "responses": {
+          "201": {
+            "description": "Retry job created.",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/RetryShards" }
+              }
+            }
+          },
+          "400": {
+            "description": "Job has no failed shards.",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/ErrorDetail" }
+              }
+            }
+          },
+          "404": {
+            "description": "Not found.",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/ErrorDetail" }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/models/": {
+      "get": {
+        "operationId": "mlops_models_list",
+        "summary": "List all registered ML models",
+        "description": "Returns a paginated list of all registered Model objects. Use page and page_size to navigate results. Each Model record includes model_id, name, version, framework, status, and created_at timestamp.",
+        "tags": ["models"],
+        "parameters": [
+          {
+            "name": "page",
+            "in": "query",
+            "required": false,
+            "description": "Page number. Default: 1.",
+            "schema": { "type": "integer", "default": 1 }
+          },
+          {
+            "name": "page_size",
+            "in": "query",
+            "required": false,
+            "description": "Results per page. Default: 20.",
+            "schema": { "type": "integer", "default": 20 }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Paginated list of models.",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/PaginatedModelList" }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "operationId": "mlops_models_create",
+        "summary": "Register a new ML model",
+        "description": "Registers a new Model in the registry. name and version are required. The returned object has status \"registered\". Returns 400 if required fields are missing.",
+        "tags": ["models"],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": { "$ref": "#/components/schemas/ModelCreate" }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Model registered.",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/Model" }
+              }
+            }
+          },
+          "400": {
+            "description": "Validation error.",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/ErrorDetail" }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/models/{model_id}/": {
+      "get": {
+        "operationId": "mlops_models_retrieve",
+        "summary": "Retrieve a single ML model",
+        "description": "Returns the Model object for the given model_id. Returns 404 if the model does not exist.",
+        "tags": ["models"],
+        "parameters": [
+          {
+            "name": "model_id",
+            "in": "path",
+            "required": true,
+            "description": "Unique model identifier. Example: \"m-llama3-8b-ft\".",
+            "schema": { "type": "string" }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Model object.",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/Model" }
+              }
+            }
+          },
+          "404": {
+            "description": "Not found.",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/ErrorDetail" }
+              }
+            }
+          }
+        }
+      },
+      "patch": {
+        "operationId": "mlops_models_partial_update",
+        "summary": "Partially update a model record",
+        "description": "Applies a partial update (PATCH) to a model. Only the fields provided in the request body are updated. Updatable fields: status (enum: active, deprecated, archived) and name. Returns the list of updated fields. Returns 404 if the model does not exist.",
+        "tags": ["models"],
+        "parameters": [
+          {
+            "name": "model_id",
+            "in": "path",
+            "required": true,
+            "description": "Unique model identifier.",
+            "schema": { "type": "string" }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": { "$ref": "#/components/schemas/ModelPatch" }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Model updated.",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/ModelUpdateResult" }
+              }
+            }
+          },
+          "404": {
+            "description": "Not found.",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/ErrorDetail" }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/datasets/": {
+      "get": {
+        "operationId": "mlops_datasets_list",
+        "summary": "List all registered datasets",
+        "description": "Returns a paginated list of all registered Dataset objects. Each Dataset record includes dataset_id, name, row_count, format, and created_at timestamp. Use page and page_size to navigate results.",
+        "tags": ["datasets"],
+        "parameters": [
+          {
+            "name": "page",
+            "in": "query",
+            "required": false,
+            "description": "Page number. Default: 1.",
+            "schema": { "type": "integer", "default": 1 }
+          },
+          {
+            "name": "page_size",
+            "in": "query",
+            "required": false,
+            "description": "Results per page. Default: 20.",
+            "schema": { "type": "integer", "default": 20 }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Paginated list of datasets.",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/PaginatedDatasetList" }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/datasets/{dataset_id}/": {
+      "get": {
+        "operationId": "mlops_datasets_retrieve",
+        "summary": "Retrieve a single dataset",
+        "description": "Returns the Dataset object for the given dataset_id. Returns 404 if the dataset does not exist.",
+        "tags": ["datasets"],
+        "parameters": [
+          {
+            "name": "dataset_id",
+            "in": "path",
+            "required": true,
+            "description": "Unique dataset identifier. Example: \"ds-support-tickets\".",
+            "schema": { "type": "string" }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Dataset object.",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/Dataset" }
+              }
+            }
+          },
+          "404": {
+            "description": "Not found.",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/ErrorDetail" }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/endpoints/": {
+      "get": {
+        "operationId": "mlops_endpoints_list",
+        "summary": "List online serving endpoints",
+        "description": "Returns a paginated list of Endpoint objects, optionally filtered by status. Each Endpoint record describes an online model serving endpoint with its model_id, environment, traffic_splits, and current status. Status enum: ACTIVE, DEGRADED, INACTIVE, PENDING.",
+        "tags": ["endpoints"],
+        "parameters": [
+          {
+            "name": "status",
+            "in": "query",
+            "required": false,
+            "description": "Filter by endpoint status. Enum: ACTIVE, DEGRADED, INACTIVE, PENDING.",
+            "schema": { "type": "string", "enum": ["ACTIVE", "DEGRADED", "INACTIVE", "PENDING"] }
+          },
+          {
+            "name": "page",
+            "in": "query",
+            "required": false,
+            "description": "Page number. Default: 1.",
+            "schema": { "type": "integer", "default": 1 }
+          },
+          {
+            "name": "page_size",
+            "in": "query",
+            "required": false,
+            "description": "Results per page. Default: 20.",
+            "schema": { "type": "integer", "default": 20 }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Paginated list of endpoints.",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/PaginatedEndpointList" }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "operationId": "mlops_endpoints_create",
+        "summary": "Deploy a new serving endpoint",
+        "description": "Deploys a new online serving endpoint for the given model. name and model_id are required. The returned endpoint has status PENDING while it initialises. Returns 400 if required fields are missing.",
+        "tags": ["endpoints"],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": { "$ref": "#/components/schemas/EndpointCreate" }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Endpoint created with status PENDING.",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/Endpoint" }
+              }
+            }
+          },
+          "400": {
+            "description": "Validation error.",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/ErrorDetail" }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/endpoints/{endpoint_id}/": {
+      "get": {
+        "operationId": "mlops_endpoints_retrieve",
+        "summary": "Retrieve a single serving endpoint",
+        "description": "Returns the Endpoint object for the given endpoint_id. Returns 404 if the endpoint does not exist.",
+        "tags": ["endpoints"],
+        "parameters": [
+          {
+            "name": "endpoint_id",
+            "in": "path",
+            "required": true,
+            "description": "Unique endpoint identifier. Example: \"ep-prod-chat\".",
+            "schema": { "type": "string" }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Endpoint object.",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/Endpoint" }
+              }
+            }
+          },
+          "404": {
+            "description": "Not found.",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/ErrorDetail" }
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "operationId": "mlops_endpoints_destroy",
+        "summary": "Decommission a serving endpoint",
+        "description": "Takes the endpoint offline and marks it DECOMMISSIONED. Returns 404 if the endpoint does not exist.",
+        "tags": ["endpoints"],
+        "parameters": [
+          {
+            "name": "endpoint_id",
+            "in": "path",
+            "required": true,
+            "description": "Unique endpoint identifier.",
+            "schema": { "type": "string" }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Endpoint decommissioned.",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/EndpointDecommissioned" }
+              }
+            }
+          },
+          "404": {
+            "description": "Not found.",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/ErrorDetail" }
+              }
+            }
+          }
+        }
+      },
+      "patch": {
+        "operationId": "mlops_endpoints_partial_update",
+        "summary": "Partially update an endpoint record",
+        "description": "Applies a partial update (PATCH) to an endpoint. Only the fields provided in the request body are updated. Updatable fields: name and model_id (swaps the model served at the endpoint). Returns the list of updated fields. Returns 404 if the endpoint does not exist.",
+        "tags": ["endpoints"],
+        "parameters": [
+          {
+            "name": "endpoint_id",
+            "in": "path",
+            "required": true,
+            "description": "Unique endpoint identifier.",
+            "schema": { "type": "string" }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": { "$ref": "#/components/schemas/EndpointPatch" }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Endpoint updated.",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/EndpointUpdateResult" }
+              }
+            }
+          },
+          "404": {
+            "description": "Not found.",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/ErrorDetail" }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/endpoints/{endpoint_id}/metrics/": {
+      "get": {
+        "operationId": "mlops_endpoints_metrics_list",
+        "summary": "List daily metric rollups for an endpoint",
+        "description": "Returns a paginated list of EndpointMetric objects (daily rollups) for the given endpoint. The days parameter limits results to the most recent N days (default 7). Each metric record includes qps, p50_ms, p99_ms, error_rate, and tokens_out for that day.",
+        "tags": ["endpoints"],
+        "parameters": [
+          {
+            "name": "endpoint_id",
+            "in": "path",
+            "required": true,
+            "description": "Unique endpoint identifier.",
+            "schema": { "type": "string" }
+          },
+          {
+            "name": "days",
+            "in": "query",
+            "required": false,
+            "description": "Number of most-recent days to include. Default: 7.",
+            "schema": { "type": "integer", "default": 7 }
+          },
+          {
+            "name": "page",
+            "in": "query",
+            "required": false,
+            "description": "Page number. Default: 1.",
+            "schema": { "type": "integer", "default": 1 }
+          },
+          {
+            "name": "page_size",
+            "in": "query",
+            "required": false,
+            "description": "Results per page. Default: 20.",
+            "schema": { "type": "integer", "default": 20 }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Paginated list of daily endpoint metrics.",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/PaginatedEndpointMetricList" }
+              }
+            }
+          },
+          "404": {
+            "description": "Not found.",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/ErrorDetail" }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/endpoints/{endpoint_id}/logs/": {
+      "get": {
+        "operationId": "mlops_endpoints_logs_retrieve",
+        "summary": "Tail recent request logs for an endpoint",
+        "description": "Returns the most recent request log lines for the given endpoint. The lines parameter controls how many lines are returned (default 50). The content field is a newline-separated string of log entries.",
+        "tags": ["endpoints"],
+        "parameters": [
+          {
+            "name": "endpoint_id",
+            "in": "path",
+            "required": true,
+            "description": "Unique endpoint identifier.",
+            "schema": { "type": "string" }
+          },
+          {
+            "name": "lines",
+            "in": "query",
+            "required": false,
+            "description": "Number of log tail lines. Default: 50.",
+            "schema": { "type": "integer", "default": 50 }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Log content for the endpoint.",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/EndpointLogs" }
+              }
+            }
+          },
+          "404": {
+            "description": "Not found.",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/ErrorDetail" }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/endpoints/{endpoint_id}/traffic/": {
+      "patch": {
+        "operationId": "mlops_endpoints_traffic_partial_update",
+        "summary": "Apply a traffic split across model versions",
+        "description": "Applies a traffic split configuration to the endpoint. The splits object maps model version identifiers to traffic percentages. All percentage values must sum to exactly 100. Returns 400 if percentages do not sum to 100. Returns 404 if the endpoint does not exist.",
+        "tags": ["endpoints"],
+        "parameters": [
+          {
+            "name": "endpoint_id",
+            "in": "path",
+            "required": true,
+            "description": "Unique endpoint identifier.",
+            "schema": { "type": "string" }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": { "$ref": "#/components/schemas/TrafficUpdate" }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Traffic split applied.",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/TrafficUpdateResult" }
+              }
+            }
+          },
+          "400": {
+            "description": "Percentages must sum to 100.",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/ErrorDetail" }
+              }
+            }
+          },
+          "404": {
+            "description": "Not found.",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/ErrorDetail" }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/alerts/": {
+      "get": {
+        "operationId": "mlops_alerts_list",
+        "summary": "List firing alerts",
+        "description": "Returns a paginated list of Alert objects. Optionally filter by severity level or by a fired_after datetime. severity enum: LOW, MEDIUM, HIGH, CRITICAL. fired_after is an ISO 8601 datetime string; only alerts fired at or after that time are returned.",
+        "tags": ["alerts"],
+        "parameters": [
+          {
+            "name": "severity",
+            "in": "query",
+            "required": false,
+            "description": "Filter by severity level. Enum: LOW, MEDIUM, HIGH, CRITICAL.",
+            "schema": { "type": "string", "enum": ["LOW", "MEDIUM", "HIGH", "CRITICAL"] }
+          },
+          {
+            "name": "fired_after",
+            "in": "query",
+            "required": false,
+            "description": "Return only alerts fired after this ISO 8601 datetime. Example: \"2026-04-09T00:00:00Z\".",
+            "schema": { "type": "string", "format": "date-time" }
+          },
+          {
+            "name": "page",
+            "in": "query",
+            "required": false,
+            "description": "Page number. Default: 1.",
+            "schema": { "type": "integer", "default": 1 }
+          },
+          {
+            "name": "page_size",
+            "in": "query",
+            "required": false,
+            "description": "Results per page. Default: 20.",
+            "schema": { "type": "integer", "default": 20 }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Paginated list of alerts.",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/PaginatedAlertList" }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/alerts/{alert_id}/": {
+      "get": {
+        "operationId": "mlops_alerts_retrieve",
+        "summary": "Retrieve a single alert",
+        "description": "Returns the Alert object for the given alert_id. Returns 404 if the alert does not exist.",
+        "tags": ["alerts"],
+        "parameters": [
+          {
+            "name": "alert_id",
+            "in": "path",
+            "required": true,
+            "description": "Unique alert identifier. Example: \"alert-001\".",
+            "schema": { "type": "string" }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Alert object.",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/Alert" }
+              }
+            }
+          },
+          "404": {
+            "description": "Not found.",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/ErrorDetail" }
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "schemas": {
+      "BatchJob": {
+        "type": "object",
+        "description": "Represents a batch inference job.",
+        "properties": {
+          "job_id": { "type": "string", "description": "Unique job identifier." },
+          "model_id": { "type": "string", "description": "Model used for this job." },
+          "dataset_id": { "type": "string", "description": "Dataset processed by this job." },
+          "status": {
+            "type": "string",
+            "description": "Current job status.",
+            "enum": ["PENDING", "RUNNING", "SUCCEEDED", "FAILED", "CANCELLED"]
+          },
+          "submitted_at": { "type": "string", "format": "date-time", "description": "ISO 8601 datetime when the job was submitted." },
+          "finished_at": { "type": "string", "format": "date-time", "nullable": true, "description": "ISO 8601 datetime when the job finished, or null if still running." },
+          "shards_total": { "type": "integer", "description": "Total number of shards the job was split into." },
+          "shards_failed": { "type": "integer", "description": "Number of shards that failed." },
+          "gpu_hours": { "type": "number", "nullable": true, "description": "Total GPU-hours consumed, or null if not yet available." },
+          "cost_usd": { "type": "number", "nullable": true, "description": "Estimated cost in USD, or null if not yet available." },
+          "failure_reason": { "type": "string", "nullable": true, "description": "Human-readable failure description, or null if the job did not fail." }
+        },
+        "required": ["job_id", "model_id", "dataset_id", "status", "submitted_at", "shards_total", "shards_failed"]
+      },
+      "BatchJobCreate": {
+        "type": "object",
+        "description": "Request body for creating a new batch inference job.",
+        "properties": {
+          "model_id": { "type": "string", "description": "Model to run inference with." },
+          "dataset_id": { "type": "string", "description": "Dataset to run inference over." },
+          "shards_total": { "type": "integer", "default": 16, "description": "Number of shards to split the job into. Default: 16." }
+        },
+        "required": ["model_id", "dataset_id"]
+      },
+      "BatchJobCancelled": {
+        "type": "object",
+        "description": "Response after cancelling a batch job.",
+        "properties": {
+          "job_id": { "type": "string" },
+          "status": { "type": "string", "example": "CANCELLED" }
+        },
+        "required": ["job_id", "status"]
+      },
+      "JobLogs": {
+        "type": "object",
+        "description": "Log content for a batch job.",
+        "properties": {
+          "job_id": { "type": "string" },
+          "lines": { "type": "integer", "description": "Number of log lines returned." },
+          "content": { "type": "string", "description": "Newline-separated log text." }
+        },
+        "required": ["job_id", "lines", "content"]
+      },
+      "RetryShards": {
+        "type": "object",
+        "description": "Response after retrying failed shards.",
+        "properties": {
+          "job_id": { "type": "string", "description": "Original job identifier." },
+          "retried_shards": { "type": "integer", "description": "Number of shards retried." },
+          "new_job_id": { "type": "string", "description": "Identifier of the newly created retry job." }
+        },
+        "required": ["job_id", "retried_shards", "new_job_id"]
+      },
+      "Model": {
+        "type": "object",
+        "description": "Represents a registered ML model.",
+        "properties": {
+          "model_id": { "type": "string", "description": "Unique model identifier." },
+          "name": { "type": "string", "description": "Human-readable model name." },
+          "version": { "type": "string", "description": "Semantic version string." },
+          "framework": { "type": "string", "nullable": true, "description": "ML framework (e.g. PyTorch, TensorFlow), or null." },
+          "status": { "type": "string", "description": "Current model status.", "enum": ["registered", "active", "deprecated", "archived"] },
+          "created_at": { "type": "string", "format": "date-time", "description": "ISO 8601 datetime when the model was registered." }
+        },
+        "required": ["model_id", "name", "version", "status"]
+      },
+      "ModelCreate": {
+        "type": "object",
+        "description": "Request body for registering a new ML model.",
+        "properties": {
+          "name": { "type": "string", "description": "Human-readable model name." },
+          "version": { "type": "string", "description": "Semantic version string. Example: \"1.0.0\"." }
+        },
+        "required": ["name", "version"]
+      },
+      "ModelPatch": {
+        "type": "object",
+        "description": "Request body for partially updating a model record.",
+        "properties": {
+          "status": { "type": "string", "enum": ["active", "deprecated", "archived"], "description": "New model status." },
+          "name": { "type": "string", "description": "New human-readable name." }
+        }
+      },
+      "ModelUpdateResult": {
+        "type": "object",
+        "description": "Response after a partial model update.",
+        "properties": {
+          "model_id": { "type": "string" },
+          "updated_fields": { "type": "array", "items": { "type": "string" }, "description": "List of field names that were updated." },
+          "status": { "type": "string", "example": "ok" }
+        },
+        "required": ["model_id", "updated_fields", "status"]
+      },
+      "Dataset": {
+        "type": "object",
+        "description": "Represents a registered dataset.",
+        "properties": {
+          "dataset_id": { "type": "string", "description": "Unique dataset identifier." },
+          "name": { "type": "string", "description": "Human-readable dataset name." },
+          "row_count": { "type": "integer", "nullable": true, "description": "Number of rows in the dataset, or null if unknown." },
+          "format": { "type": "string", "nullable": true, "description": "Data format (e.g. parquet, jsonl), or null." },
+          "created_at": { "type": "string", "format": "date-time", "description": "ISO 8601 datetime when the dataset was registered." }
+        },
+        "required": ["dataset_id", "name"]
+      },
+      "Endpoint": {
+        "type": "object",
+        "description": "Represents an online model serving endpoint.",
+        "properties": {
+          "endpoint_id": { "type": "string", "description": "Unique endpoint identifier." },
+          "name": { "type": "string", "description": "Human-readable endpoint name." },
+          "model_id": { "type": "string", "description": "Model currently served at this endpoint." },
+          "status": {
+            "type": "string",
+            "description": "Current endpoint status.",
+            "enum": ["ACTIVE", "DEGRADED", "INACTIVE", "PENDING", "DECOMMISSIONED"]
+          },
+          "environment": { "type": "string", "description": "Deployment environment (e.g. production, staging)." },
+          "traffic_splits": {
+            "type": "object",
+            "nullable": true,
+            "additionalProperties": { "type": "number" },
+            "description": "Current traffic split across model versions (model_version_id -> percentage), or null."
+          },
+          "created_at": { "type": "string", "format": "date-time", "description": "ISO 8601 datetime when the endpoint was created." }
+        },
+        "required": ["endpoint_id", "name", "model_id", "status"]
+      },
+      "EndpointCreate": {
+        "type": "object",
+        "description": "Request body for deploying a new serving endpoint.",
+        "properties": {
+          "name": { "type": "string", "description": "Human-readable endpoint name." },
+          "model_id": { "type": "string", "description": "Model to serve at this endpoint." }
+        },
+        "required": ["name", "model_id"]
+      },
+      "EndpointPatch": {
+        "type": "object",
+        "description": "Request body for partially updating an endpoint.",
+        "properties": {
+          "name": { "type": "string", "description": "New human-readable name." },
+          "model_id": { "type": "string", "description": "Swap the model served at this endpoint." }
+        }
+      },
+      "EndpointUpdateResult": {
+        "type": "object",
+        "description": "Response after a partial endpoint update.",
+        "properties": {
+          "endpoint_id": { "type": "string" },
+          "updated_fields": { "type": "array", "items": { "type": "string" }, "description": "List of field names that were updated." },
+          "status": { "type": "string", "example": "ok" }
+        },
+        "required": ["endpoint_id", "updated_fields", "status"]
+      },
+      "EndpointDecommissioned": {
+        "type": "object",
+        "description": "Response after decommissioning an endpoint.",
+        "properties": {
+          "endpoint_id": { "type": "string" },
+          "status": { "type": "string", "example": "DECOMMISSIONED" }
+        },
+        "required": ["endpoint_id", "status"]
+      },
+      "EndpointMetric": {
+        "type": "object",
+        "description": "Daily metric rollup for an endpoint.",
+        "properties": {
+          "endpoint_id": { "type": "string", "description": "Endpoint this metric belongs to." },
+          "date": { "type": "string", "format": "date", "description": "Date of this rollup (YYYY-MM-DD)." },
+          "qps": { "type": "number", "description": "Average queries per second on this date." },
+          "p50_ms": { "type": "integer", "description": "Median latency in milliseconds." },
+          "p99_ms": { "type": "integer", "description": "99th-percentile latency in milliseconds." },
+          "error_rate": { "type": "number", "description": "Fraction of requests that resulted in an error (0.0–1.0)." },
+          "tokens_out": { "type": "integer", "description": "Total output tokens generated on this date." }
+        },
+        "required": ["endpoint_id", "date", "qps", "p50_ms", "p99_ms", "error_rate", "tokens_out"]
+      },
+      "EndpointLogs": {
+        "type": "object",
+        "description": "Log content for an endpoint.",
+        "properties": {
+          "endpoint_id": { "type": "string" },
+          "lines": { "type": "integer", "description": "Number of log lines returned." },
+          "content": { "type": "string", "description": "Newline-separated log text." }
+        },
+        "required": ["endpoint_id", "lines", "content"]
+      },
+      "TrafficUpdate": {
+        "type": "object",
+        "description": "Request body for setting a traffic split.",
+        "properties": {
+          "splits": {
+            "type": "object",
+            "additionalProperties": { "type": "number" },
+            "description": "Map of model_version_id to traffic percentage. Values must sum to 100. Example: {\"v1\": 80, \"v2\": 20}."
+          }
+        },
+        "required": ["splits"]
+      },
+      "TrafficUpdateResult": {
+        "type": "object",
+        "description": "Response after applying a traffic split.",
+        "properties": {
+          "endpoint_id": { "type": "string" },
+          "applied": {
+            "type": "object",
+            "additionalProperties": { "type": "number" },
+            "description": "The traffic split that was applied."
+          },
+          "status": { "type": "string", "example": "OK" }
+        },
+        "required": ["endpoint_id", "applied", "status"]
+      },
+      "Alert": {
+        "type": "object",
+        "description": "Represents a firing alert.",
+        "properties": {
+          "alert_id": { "type": "string", "description": "Unique alert identifier." },
+          "endpoint_id": { "type": "string", "description": "Endpoint that triggered this alert." },
+          "severity": {
+            "type": "string",
+            "description": "Alert severity level.",
+            "enum": ["LOW", "MEDIUM", "HIGH", "CRITICAL"]
+          },
+          "fired_at": { "type": "string", "format": "date-time", "description": "ISO 8601 datetime when the alert fired." },
+          "message": { "type": "string", "description": "Human-readable description of the alert condition." }
+        },
+        "required": ["alert_id", "endpoint_id", "severity", "fired_at", "message"]
+      },
+      "ErrorDetail": {
+        "type": "object",
+        "description": "Standard error response.",
+        "properties": {
+          "detail": { "type": "string", "description": "Human-readable error message." }
+        },
+        "required": ["detail"]
+      },
+      "PaginatedBatchJobList": {
+        "type": "object",
+        "description": "Paginated list of BatchJob objects.",
+        "properties": {
+          "count": { "type": "integer", "description": "Total number of matching items." },
+          "next": { "type": "string", "nullable": true, "description": "URL of the next page, or null." },
+          "previous": { "type": "string", "nullable": true, "description": "URL of the previous page, or null." },
+          "results": { "type": "array", "items": { "$ref": "#/components/schemas/BatchJob" } }
+        },
+        "required": ["count", "results"]
+      },
+      "PaginatedModelList": {
+        "type": "object",
+        "description": "Paginated list of Model objects.",
+        "properties": {
+          "count": { "type": "integer", "description": "Total number of matching items." },
+          "next": { "type": "string", "nullable": true, "description": "URL of the next page, or null." },
+          "previous": { "type": "string", "nullable": true, "description": "URL of the previous page, or null." },
+          "results": { "type": "array", "items": { "$ref": "#/components/schemas/Model" } }
+        },
+        "required": ["count", "results"]
+      },
+      "PaginatedDatasetList": {
+        "type": "object",
+        "description": "Paginated list of Dataset objects.",
+        "properties": {
+          "count": { "type": "integer", "description": "Total number of matching items." },
+          "next": { "type": "string", "nullable": true, "description": "URL of the next page, or null." },
+          "previous": { "type": "string", "nullable": true, "description": "URL of the previous page, or null." },
+          "results": { "type": "array", "items": { "$ref": "#/components/schemas/Dataset" } }
+        },
+        "required": ["count", "results"]
+      },
+      "PaginatedEndpointList": {
+        "type": "object",
+        "description": "Paginated list of Endpoint objects.",
+        "properties": {
+          "count": { "type": "integer", "description": "Total number of matching items." },
+          "next": { "type": "string", "nullable": true, "description": "URL of the next page, or null." },
+          "previous": { "type": "string", "nullable": true, "description": "URL of the previous page, or null." },
+          "results": { "type": "array", "items": { "$ref": "#/components/schemas/Endpoint" } }
+        },
+        "required": ["count", "results"]
+      },
+      "PaginatedEndpointMetricList": {
+        "type": "object",
+        "description": "Paginated list of EndpointMetric objects.",
+        "properties": {
+          "count": { "type": "integer", "description": "Total number of matching items." },
+          "next": { "type": "string", "nullable": true, "description": "URL of the next page, or null." },
+          "previous": { "type": "string", "nullable": true, "description": "URL of the previous page, or null." },
+          "results": { "type": "array", "items": { "$ref": "#/components/schemas/EndpointMetric" } }
+        },
+        "required": ["count", "results"]
+      },
+      "PaginatedAlertList": {
+        "type": "object",
+        "description": "Paginated list of Alert objects.",
+        "properties": {
+          "count": { "type": "integer", "description": "Total number of matching items." },
+          "next": { "type": "string", "nullable": true, "description": "URL of the next page, or null." },
+          "previous": { "type": "string", "nullable": true, "description": "URL of the previous page, or null." },
+          "results": { "type": "array", "items": { "$ref": "#/components/schemas/Alert" } }
+        },
+        "required": ["count", "results"]
+      }
+    }
+  }
+}
