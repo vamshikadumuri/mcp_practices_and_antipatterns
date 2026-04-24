@@ -8,7 +8,7 @@ own MCP layer.
 
 | # | Server | Tools | Role |
 |---|---|---:|---|
-| 1 | `rest_mirror_server` | 22 | What an auto-generating MCP gateway produces from the Swagger spec |
+| 1 | `rest_mirror_server` | 22 | Auto-generated from `mlops_backend/openapi.json` via FastMCP `OpenAPIProvider` |
 | 2 | `task_oriented_server` | 6 | Thoughtfully hand-designed workflow aggregates |
 | 3 | `task_codemode_server` | 6 + 2 | Same 6 task tools, plus `list_api` + `execute_python` as an escape hatch |
 
@@ -23,46 +23,49 @@ Does adding Code Mode earn its keep on top of a strong task-tool baseline?
 ## Architecture
 
 ```
-┌─────────────────────────────────────────────────────────────┐
-│  mlops_backend/flask_app.py  — real Flask app (subprocess)  │
-│  DRF-style endpoints over data/*.json                       │
-│  "Production": fixed shape, fixed behavior.                 │
-└─────────────────────────────────────────────────────────────┘
-                            ▲
-                            │ HTTP (requests)
-          ┌─────────────────┴────────────────────────┐
-          │  mlops_backend/api.py                    │
-          │  REST client ONLY — 1:1 with Flask.      │
-          │  Preserves pagination envelopes exactly. │
-          │  No unwrapping, no composition.          │
-          └────┬───────────────────────────┬─────────┘
-               │                           │
-    ┌──────────▼────────────┐   ┌──────────▼──────────────────────┐
-    │ rest_mirror_server.py │   │ servers/mlops.py                │
-    │ 22 @mcp.tool          │   │ MCP-side helpers (NOT backend): │
-    │ verbose OAS docstrings│   │  - pagination-unwrapping lists  │
-    │ pagination envelopes  │   │  - 6 workflow aggregates        │
-    │ stub write tools      │   └──────────┬──────────┬───────────┘
-    └───────────────────────┘              │          │
-                               ┌───────────▼──┐   ┌───▼───────────────────┐
-                               │ task_oriented│   │ task_codemode_server  │
-                               │ _server      │   │ 6 task tools          │
-                               │ 6 @mcp.tool  │   │ + list_api            │
-                               │              │   │ + execute_python      │
-                               └──────────────┘   └───────────────────────┘
+┌─────────────────────────────────────────────────────────────────────┐
+│  mlops_backend/flask_app.py  — real Flask app (subprocess)          │
+│  DRF-style endpoints over data/*.json  /  "Production": fixed shape │
+└──────────────────┬──────────────────────────────────────────────────┘
+     ▲ HTTP (httpx) │ HTTP (requests)
+     │              ▼
+     │  ┌───────────────────────────┐
+     │  │  mlops_backend/api.py     │
+     │  │  REST client ONLY — 1:1   │
+     │  │  with Flask. Preserves    │
+     │  │  pagination envelopes.    │
+     │  │  No unwrapping.           │
+     │  └──────────────┬────────────┘
+     │                 │
+┌────┴───────────────┐ │  ┌────────────────────────────────────┐
+│ rest_mirror_server │ │  │ servers/mlops.py                   │
+│ OpenAPIProvider    │ └─►│ MCP-side helpers (NOT backend):    │
+│ from openapi.json  │    │  - pagination-unwrapping lists     │
+│ 22 generated tools │    │  - 6 workflow aggregates           │
+│ verbose schemas    │    └──────────┬──────────┬──────────────┘
+│ pagination env.    │               │          │
+│ stub write tools   │  ┌────────────▼──┐  ┌───▼───────────────────┐
+└────────────────────┘  │ task_oriented │  │ task_codemode_server  │
+                        │ _server       │  │ 6 task tools          │
+                        │ 6 @mcp.tool   │  │ + list_api            │
+                        └───────────────┘  │ + execute_python      │
+                                           └───────────────────────┘
 ```
 
 **The invariant:** `mlops_backend/api.py` is a pure REST client — nothing more.
-Every MCP server builds its own helpers in `servers/mlops.py` on top of the fixed
-backend. This mirrors production reality: the backend is owned by a different team
-and its shape is fixed. The MCP layer is where you decide how to expose it.
+`rest_mirror_server` calls Flask directly via `httpx` through `OpenAPIProvider`;
+the two task servers build their own helpers in `servers/mlops.py` on top of `api.py`.
+This mirrors production reality: the backend is owned by a different team and its
+shape is fixed. The MCP layer is where you decide how to expose it.
 
 ---
 
 ## Comparison #1 — REST-mirror vs. Task-oriented
 
-An auto-generating gateway (IBM mcp-context-forge, any OpenAPI→MCP converter)
-applied to a Django/DRF Swagger spec produces tools like the REST-mirror server.
+The REST-mirror server is auto-generated from `mlops_backend/openapi.json` via
+FastMCP `OpenAPIProvider` — the real output of an OpenAPI-to-MCP conversion, not a
+simulation. Any gateway approach (IBM mcp-context-forge, DRF-spectacular + converter)
+applied to a Swagger spec produces the same pattern.
 A human writing task tools produces the task-oriented server. Four things change
 together:
 
